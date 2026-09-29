@@ -1,0 +1,78 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Evidence",
+  "description": "单条证据：仅记录数据直接支持的陈述，不夹带因果解释。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "type", "statement", "source", "status"],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "schema 版本，固定为 1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^E-[0-9]{3,}$",
+      "description": "证据 id，格式 E-<至少3位数字>"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["observation", "measurement", "reference", "artifact"],
+      "description": "证据类型"
+    },
+    "statement": {
+      "type": "string",
+      "description": "仅写数据直接支持的陈述，不得夹带因果或机制解释"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["file", "script", "git_commit"],
+      "description": "可复算来源",
+      "properties": {
+        "file": {
+          "type": "string",
+          "description": "数据 / 文献文件路径"
+        },
+        "script": {
+          "type": "string",
+          "description": "生成该数据的脚本路径"
+        },
+        "git_commit": {
+          "type": "string",
+          "description": "对应的提交号"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "适用边界",
+      "properties": {
+        "cases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "适用案例列表"
+        },
+        "parameter_range": {
+          "type": "string",
+          "description": "适用参数范围（如 h in [0.1, 1.0]）"
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "已知局限（外推风险、未覆盖情形）"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "deprecated", "superseded"],
+      "description": "证据状态"
+    },
+    "recorded_at": {
+      "type": "string",
+      "description": "记录日期（YYYY-MM-DD）"
+    }
+  }
+}

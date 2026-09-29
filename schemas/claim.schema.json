@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Claim",
+  "description": "论文/报告中的一条强断言：必须标注分类与适用范围，事实性断言必须有 Evidence 支撑。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["claim_id", "text", "classification", "supports", "scope", "limitations"],
+  "properties": {
+    "claim_id": {
+      "type": "string",
+      "pattern": "^C-[0-9]{3,}$",
+      "description": "claim id，格式 C-<至少3位数字>"
+    },
+    "text": {
+      "type": "string",
+      "description": "断言的原文陈述"
+    },
+    "classification": {
+      "type": "string",
+      "enum": ["fact", "inference", "hypothesis"],
+      "description": "断言强度分类；不得把 inference/hypothesis 写成 fact"
+    },
+    "supports": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "支撑该断言的证据 id 列表（E-xxx）；classification 为 fact 时不得为空"
+    },
+    "scope": {
+      "type": "string",
+      "description": "断言适用的参数区间、几何/材料假设与适用口径"
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "已知局限与不适用情形"
+    },
+    "source": {
+      "type": "string",
+      "description": "该 claim 出现在哪个文件/章节（论文、报告等）"
+    }
+  }
+}

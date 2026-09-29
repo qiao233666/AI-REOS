@@ -1,0 +1,15 @@
+# 子 Agent 返回协议：所有子 Agent 必须按此结构返回。
+# 字段名与枚举值一律英文，说明文字用中文。规范见 aiops/protocols/subagent-contract.md。
+status: complete                    # complete|blocked|inconclusive
+answer: ""                          # 对任务的直接答复
+facts_used: []                      # 使用到的既有事实 / Evidence id
+new_findings:                       # 本次新发现（每条需给出 source）
+  - statement: ""                   # 仅写数据直接支持的陈述，不夹带因果
+    source: ""                      # 可复算来源（file/script/git_commit）
+uncertainty:
+  level: low                        # low|medium|high
+  reason: ""                        # 不确定性的具体来源
+conflicts: []                       # 与既有 Evidence / Decision 的冲突
+recommended_next_action: ""         # 建议的下一步（blocked/inconclusive 时必填）
+files_changed: []                   # 改动文件列表，无则空
+tests_run: []                       # 运行的测试（命令 + PASS|FAIL），无则空

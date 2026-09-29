@@ -1,0 +1,28 @@
+#!/bin/sh
+# AI-REOS Tier-0 校验门禁：提交前运行 aiops/checks/run_all_checks.py。
+#
+# 本文件是**版本化副本**，实际生效位置是 .git/hooks/pre-commit。
+# 重新安装：python aiops/checks/install_hooks.py
+# 临时跳过：git commit --no-verify
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+[ -n "$REPO_ROOT" ] || exit 0
+
+PY="${AIOS_PYTHON:-}"
+if [ -z "$PY" ]; then
+  if [ -x "__AIOS_PYTHON__" ]; then
+    PY="__AIOS_PYTHON__"
+  else
+    PY="$(command -v python || command -v python3)"
+  fi
+fi
+if [ -z "$PY" ]; then
+  echo "[AI-REOS] 未找到可用的 python，跳过校验（不阻止提交）"
+  exit 0
+fi
+
+if ! "$PY" "$REPO_ROOT/aiops/checks/run_all_checks.py"; then
+  printf '\n[AI-REOS] 校验未通过，已阻止本次提交。\n'
+  printf '  修复后重试；确需跳过时使用：git commit --no-verify\n'
+  exit 1
+fi

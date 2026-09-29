@@ -1,0 +1,51 @@
+# Task Spec 模板：复制为 aiops/specs/<id>.task.yaml 后填写。
+# 字段名与枚举值一律英文；说明文字用中文。
+# 详细规范见 aiops/protocols/task-spec.md，结构约束见 aiops/schemas/task.schema.json。
+schema_version: 1
+id: T-XXX                          # 任务 id，格式 T-<数字>
+title: ""                          # 一句话标题
+status: draft                      # draft|ready|running|blocked|complete|aborted
+priority: normal                   # low|normal|high
+owner: ""                          # 负责人
+objective:
+  primary: ""                      # 要交付的可观测结果（WHAT）
+  why: ""                          # 为什么做，对应哪个目标或阻塞（WHY）
+inputs:
+  files: []                        # 允许读取的输入文件
+  evidence: []                     # 可用 Evidence id 列表（E-###）
+  external_sources: []             # 可靠外部来源（文献/URL）
+scope:
+  include: []                      # 本次要做的范围
+  exclude: []                      # 明确不做的范围
+constraints: []                    # 硬性约束（禁止改动、环境、编译器路径等）
+assumptions: []                    # 显式假设，不得隐含
+risk:
+  level: low                       # low|medium|high
+  approval_required_for: []        # 需要人工批准的项（如删结果目录、改 schema）
+plan:
+  required: false                  # 是否需要 HOW 计划（见 TEMPLATE.plan.md）
+  file: null                       # 计划文件路径，无则 null
+  trigger_reason: null             # 触发 Plan 的原因
+acceptance: []                     # 可复算、可判定的验收条件
+verification:
+  commands: []                     # 验收命令列表
+  invariants: []                   # 不变量（数值容差、守恒量等）
+output:
+  files: []                        # 预期产出文件
+  response_schema: "aiops/templates/agent-result.yaml"
+budget:
+  max_subagents: 0                 # 允许派生的子 Agent 数上限
+  max_output_tokens: 1000          # 返回 token 上限
+  max_tool_calls: null             # 工具调用上限，无则 null
+  max_wall_time_minutes: null      # 墙钟时间上限（分钟）
+  max_cpu_hours: null              # CPU 小时上限
+  max_gpu_hours: null              # GPU 小时上限
+  escalation_conditions: []        # 升级（转人工）条件
+convergence:
+  required: false                  # 是否以收敛结论为目标
+  trigger_reason: null             # 触发 Converge 的原因
+  result: pending                  # pending|converged|not_converged|inconclusive
+  gaps: []                         # 距收敛还差什么
+provenance:
+  created_by: ""                   # 创建者
+  created_at: ""                   # 创建日期（YYYY-MM-DD）

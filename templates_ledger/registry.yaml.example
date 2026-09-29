@@ -1,0 +1,28 @@
+# 实验注册表骨架：用于索引所有实验 / 仿真批次。
+# 字段名与枚举值一律英文，说明文字用中文。规范见 aiops/protocols/experiment-protocol.md。
+#
+# 每条实验至少包含：
+#   id              实验 id（EXP-###）
+#   status          状态：planned|running|complete|failed|aborted
+#   purpose         实验目的
+#   experiment_file 对应的 Experiment Spec 文件路径
+#   owner           负责人
+#   created_at      创建日期（YYYY-MM-DD）
+#
+# 若项目已使用 DVC/MLflow 等跟踪系统，本条只存外部 run_id/URI 与关键 hash
+# （git_commit / dataset_hash / config_hash），不要重造跟踪系统。
+schema_version: 1
+experiments: []
+# 示例（复制后填写）：
+# experiments:
+#   - id: EXP-001
+#     status: planned
+#     purpose: "扫描几何参数对有效模量的影响"
+#     experiment_file: "aiops/experiments/EXP-001.experiment.yaml"
+#     owner: ""
+#     created_at: "2026-09-28"
+#     external_run_id: null        # 若使用 DVC/MLflow 等，填外部 run id
+#     external_run_uri: null       # 外部跟踪系统的 URI
+#     git_commit: ""
+#     dataset_hash: ""
+#     config_hash: ""

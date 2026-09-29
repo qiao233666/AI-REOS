@@ -1,0 +1,258 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Task Spec",
+  "description": "任务规格：规定 WHAT/WHY/SCOPE/ACCEPTANCE 及预算与收敛要求。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "title", "status", "objective", "scope", "acceptance", "verification"],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "schema 版本，固定为 1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^T-[0-9]+$",
+      "description": "任务 id，格式 T-<数字>"
+    },
+    "title": {
+      "type": "string",
+      "description": "任务标题"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "ready", "running", "blocked", "complete", "aborted"],
+      "description": "任务状态"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "normal", "high"],
+      "description": "优先级"
+    },
+    "owner": {
+      "type": "string",
+      "description": "负责人"
+    },
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "why"],
+      "description": "目标：交付什么以及为什么",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "description": "要交付的可观测结果（WHAT）"
+        },
+        "why": {
+          "type": "string",
+          "description": "为什么做，对应哪个目标或阻塞（WHY）"
+        }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "允许使用的输入",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "允许读取的文件"
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "可用 Evidence id（E-###）"
+        },
+        "external_sources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "可靠外部来源（文献/URL）"
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["include", "exclude"],
+      "description": "范围：做与不做",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "本次要做的范围"
+        },
+        "exclude": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "明确不做的范围"
+        },
+        "actual_deviations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "执行中与原计划的偏差及原因（收尾时回填；无偏差可省略）"
+        }
+      }
+    },
+    "constraints": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "硬性约束（禁止改动、环境、编译器路径等）"
+    },
+    "assumptions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "显式假设，不得隐含"
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "风险与需人工批准的项",
+      "properties": {
+        "level": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "风险等级"
+        },
+        "approval_required_for": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "需要人工批准的项"
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "是否需要 HOW 计划",
+      "properties": {
+        "required": {
+          "type": "boolean",
+          "description": "是否需要 Plan"
+        },
+        "file": {
+          "type": ["string", "null"],
+          "description": "计划文件路径，无则 null"
+        },
+        "trigger_reason": {
+          "type": ["string", "null"],
+          "description": "触发 Plan 的原因"
+        }
+      }
+    },
+    "acceptance": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "可复算、可判定的验收条件"
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "验收方式",
+      "properties": {
+        "commands": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "验收命令列表"
+        },
+        "invariants": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "不变量（数值容差、守恒量等）"
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "预期产出",
+      "properties": {
+        "files": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "预期产出文件"
+        },
+        "response_schema": {
+          "type": "string",
+          "description": "返回结构所遵循的 schema 路径"
+        }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "预算上限",
+      "properties": {
+        "max_subagents": {
+          "type": ["integer", "null"],
+          "description": "允许派生的子 Agent 数上限"
+        },
+        "max_output_tokens": {
+          "type": ["integer", "null"],
+          "description": "返回 token 上限"
+        },
+        "max_tool_calls": {
+          "type": ["integer", "null"],
+          "description": "工具调用上限"
+        },
+        "max_wall_time_minutes": {
+          "type": ["number", "null"],
+          "description": "墙钟时间上限（分钟）"
+        },
+        "max_cpu_hours": {
+          "type": ["number", "null"],
+          "description": "CPU 小时上限"
+        },
+        "max_gpu_hours": {
+          "type": ["number", "null"],
+          "description": "GPU 小时上限"
+        },
+        "escalation_conditions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "升级（转人工）条件"
+        }
+      }
+    },
+    "convergence": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "收敛判定要求",
+      "properties": {
+        "required": {
+          "type": "boolean",
+          "description": "是否以收敛结论为目标"
+        },
+        "trigger_reason": {
+          "type": ["string", "null"],
+          "description": "触发 Converge 的原因"
+        },
+        "result": {
+          "type": "string",
+          "enum": ["pending", "converged", "not_converged", "inconclusive"],
+          "description": "收敛结果（未收敛不得当作连续介质极限）"
+        },
+        "gaps": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "距收敛还差什么"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "创建信息",
+      "properties": {
+        "created_by": {
+          "type": "string",
+          "description": "创建者"
+        },
+        "created_at": {
+          "type": "string",
+          "description": "创建日期（YYYY-MM-DD）"
+        }
+      }
+    }
+  }
+}

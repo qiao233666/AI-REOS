@@ -1,0 +1,18 @@
+# 单条 Evidence 骨架。规范见 aiops/protocols/evidence-protocol.md，
+# 结构约束见 aiops/schemas/evidence.schema.json。字段名与枚举值一律英文，说明文字用中文。
+# 注意：statement 只能是数据直接支持的内容，不得夹带因果或机制解释；
+#       因果 / 机制解释请写入 Decision，或标记为 Hypothesis。
+schema_version: 1
+id: E-###                          # 证据 id，格式 E-<数字>，至少 3 位
+type: observation                  # observation|measurement|reference|artifact
+statement: ""                      # 仅写数据直接支持的陈述（趋势、范围、数值）
+source:
+  file: ""                         # 数据 / 文献文件路径
+  script: ""                       # 生成该数据的脚本路径
+  git_commit: ""                   # 对应的提交号
+scope:
+  cases: []                        # 适用案例列表
+  parameter_range: ""              # 适用参数范围（如 "h in [0.1, 1.0]"）
+limitations: []                    # 已知局限（外推风险、未覆盖情形）
+status: active                     # active|deprecated|superseded
+recorded_at: ""                    # 记录日期（YYYY-MM-DD）

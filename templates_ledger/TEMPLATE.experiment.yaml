@@ -1,0 +1,47 @@
+# Experiment Spec 模板：复制为 aiops/experiments/EXP-<id>.experiment.yaml 后填写。
+# 字段名与枚举值一律英文，说明文字用中文。规范见 aiops/protocols/experiment-protocol.md，
+# 结构约束见 aiops/schemas/experiment.schema.json。
+#
+# 必须记录的模拟条件（provenance）：
+#   - solver                  求解器（如 RCWA / COMSOL）
+#   - truncation              谐波截断（harmonic truncation）
+#   - wavelength_convention   波长 / 频率约定（单位与定义）
+#   - polarization            偏振（TE/TM/圆偏振等）
+#   - boundary_conditions     边界条件
+#   - material_model          材料模型（色散模型与来源）
+#   - random_seed             随机种子
+#   - device                  设备（CPU/GPU 型号）
+#   - precision               数值精度（float32 / float64）
+#   - output_dir              输出目录
+#
+# 同时请把以上信息登记进 registry.yaml 或外部跟踪系统。
+schema_version: 1
+id: EXP-XXX                             # 实验 id，格式 EXP-<至少3位数字>
+purpose: ""                            # 实验目的（要回答的问题）
+status: planned                        # planned|running|complete|failed|aborted
+git_commit: ""                         # 代码提交号
+dataset_hash: ""                       # 数据集哈希
+config_hash: ""                        # 配置哈希
+environment_lock: ""                   # 环境锁定（环境名 / 依赖版本）
+
+factors: {}                            # 自变量与取值，示例：{h: [0.1, 0.2], vf: [0.3, 0.5]}
+
+controlled:                            # 被固定的控制量
+  boundary_conditions:
+    type: periodic                     # 示例：周期边界
+    domain: unit_cell
+    notes: ""
+  solver: RCWA                         # 求解器
+  truncation: ""                       # 谐波截断（如 "N=15"）
+  wavelength_convention: ""            # 波长 / 频率约定（单位与定义）
+  polarization: ""                     # 偏振（TE/TM/圆偏振等）
+  material_model: ""                   # 材料模型
+  random_seed: null                    # 随机种子
+  device: ""                           # 设备（CPU/GPU 型号）
+  precision: ""                        # 数值精度（float32 / float64）
+  output_dir: ""                       # 输出目录
+
+measurements: []                       # 要测量的观测量列表
+predictions: {}                        # 预期结果（用于可证伪的判别）
+discriminating_readout: ""             # 能区分竞争假设的判别读数
+acceptance: []                         # 验收条件（含数值容差）

@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Experiment Spec",
+  "description": "实验/仿真规格：规定变量、控制量、测量与验收，并要求完整 provenance。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "purpose", "status", "git_commit", "dataset_hash", "config_hash", "environment_lock", "factors", "controlled", "measurements", "predictions", "discriminating_readout", "acceptance"],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "schema 版本，固定为 1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^EXP-[0-9]{3,}$",
+      "description": "实验 id，格式 EXP-<至少3位数字>"
+    },
+    "purpose": {
+      "type": "string",
+      "description": "实验目的（要回答什么问题）"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["planned", "running", "complete", "failed", "aborted"],
+      "description": "实验状态"
+    },
+    "git_commit": {
+      "type": "string",
+      "description": "代码提交号"
+    },
+    "dataset_hash": {
+      "type": "string",
+      "description": "数据集哈希"
+    },
+    "config_hash": {
+      "type": "string",
+      "description": "配置哈希"
+    },
+    "environment_lock": {
+      "type": "string",
+      "description": "环境锁定信息（依赖版本 / 环境名）"
+    },
+    "factors": {
+      "type": "object",
+      "description": "自变量（因子）及其取值，如 {h: [0.1, 0.2]}"
+    },
+    "controlled": {
+      "type": "object",
+      "description": "被固定的控制量（边界条件、求解器、材料模型、随机种子、设备、精度、输出目录等）"
+    },
+    "measurements": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "要测量的观测量列表（不得为空）"
+    },
+    "predictions": {
+      "type": "object",
+      "description": "预期结果（用于可证伪的判别）"
+    },
+    "discriminating_readout": {
+      "type": "string",
+      "description": "能区分竞争假设的判别读数"
+    },
+    "acceptance": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "验收条件（含数值容差，不得为空）"
+    }
+  }
+}

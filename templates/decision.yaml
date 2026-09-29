@@ -1,0 +1,11 @@
+# Decision 记录骨架：一次关键取舍的留痕。
+# 字段名与枚举值一律英文，说明文字用中文。
+schema_version: 1
+id: D-XXX                          # 决策 id，格式 D-<数字>
+date: ""                           # 决策日期（YYYY-MM-DD）
+status: active                     # active|superseded
+title: ""                          # 决策标题
+decision: ""                       # 决策内容（做了什么选择）
+why_evidence_ids: []               # 支撑该决策的 Evidence id（E-###）
+alternatives_rejected: []          # 被否决的备选方案及原因
+revisit_when: ""                   # 什么条件下需要重新审视该决策
