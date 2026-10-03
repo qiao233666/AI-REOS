@@ -176,3 +176,8 @@
   账本与世界层骨架不动（实测见源头项目 dist/ 验收记录）。
 - **v1.3.1 缺陷修复**：`tests/` 缺 `__init__.py`，`unittest discover -s aiops/tests`
   在已安装仓报 "Start directory is not importable"（CI 模板命令同样必挂）；v1.3.2 补齐。
+- **文档修订（2026-10-04）**：TUTORIAL 增 §5 世界观层章节（是什么/怎么运行/与门禁联动/
+  UNKNOWN 语义/排障表），排障索引与学习路径顺延为 §6/§7 并补世界层条目；kit VERSION
+  不变（纯文档修订）。
+- **发布通道（2026-10-04）**：GitHub 仓库 qiao233666/AI-REOS + 一键镜像发布脚本
+  （源头项目 dist/publish_to_github.py，见 HOW_TO_UPLOAD_GITHUB.md）。

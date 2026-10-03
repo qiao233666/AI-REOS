@@ -150,7 +150,61 @@ pre-commit 只依赖 git——所以门禁是标配，hook 是增强。
 
 ---
 
-## 5. 快速排障索引
+## 5. 世界观层：项目的"设定集"（v1.3.2 新增）
+
+**它解决什么问题**：账本记的是"结论"（什么被证实/什么走不通），但 AI 还会栽在
+另一类问题上——"这个环境/工具/设计文档**存在吗**？在哪？还算数吗？"。源头项目
+发生过三次真实事故：问 COMSOL 装没装（三层记录都在但没被查到）、问可信域 Π_D 的
+定义（设计文档里有但没有任何索引指过去）、问层数扫描设计——AI 都把"我没找到"
+答成了"不存在"。
+
+**三层结构**（类比一本设定集）：
+
+- `world/objects/*.yaml`（**设定条目，人维护**）：一对象一文件。每条含权威级
+  （binding=必须遵守 / advisory=参考 / 历史）、生命周期、适用范围、检索关键词
+  （bindings）；环境对象还带"能力清单"（装在哪/什么版本/许可证验证过没有/何时复查）；
+- `registry.generated.yaml` + `CURRENT.generated.md`（**阅读视图，机器生成**）：
+  由构建器整文件生成、禁手改——手改了门禁立刻能抓到；
+- `coverage.yaml`（**覆盖声明**）：声明"我索引了哪些范围的文档"；范围内出现没
+  登记的新文件会被检查点名（孤儿文档）。
+
+**怎么运行（三条命令）**：
+
+```bash
+python aiops/world/tools/build_world_registry.py                 # 重建两个视图
+python aiops/world/tools/build_world_registry.py --query "关键词"  # 召回查询
+python aiops/world/tools/verify_world_registry.py                # 五类检查+召回探针
+```
+
+**与门禁怎么联动**：严格程度由 `coverage.yaml` 的 `status` 唯一决定——
+`partial`=report-only（新装默认，只报告不拦截）；`full`=fail-closed（检查不过
+提交被拦）。从 partial 升 full 需要一次 Decision（全部对象分类完成+召回探针通过）。
+这个模式判定是自动的：门禁第六项每次自己读 coverage.yaml。
+
+**最重要的一个语义：UNKNOWN**——查询未命中时系统返回 UNKNOWN，**AI 必须把它
+当"未知"，禁止当成"不存在"**。整个世界层就是围绕这个根本失效模式设计的。
+
+**人要不要维护它**：几乎不用。AI 在批准纳入新设计文档时登记对象并重建视图；
+人只在两个时刻出手：判定某文档"算不算权威约束"（adopted 与否）、用 Decision
+确认 coverage 升 full。
+
+**账本也会"瘦身"但原文永不删**：`world/tools/build_ledger_views.py` 把四本账的
+条目分成 active-core（当前要关注）/ active-cold（仍有效待归位）/ history（已被
+替代）三层视图——原文一个字不动，变的只是"现在该看什么"有了机器视图。`--id` 查
+任意条目会带回它的**替代链**（谁更正了它、保留了哪部分）。
+
+**出问题时的特征**：
+
+| 症状 | 根因 | 修法 |
+|---|---|---|
+| 门禁第六项红 | 视图被手改 / 对象引用悬空 / 探针退化 | 跑 verify 看具体条目；视图漂移就重建 |
+| 查询返回 UNKNOWN 但确信存在 | 对象没登记或检索关键词没覆盖 | 登记对象/补 keywords，重建视图 |
+| 新文档没被要求登记 | 它不在 coverage 声明的范围里 | 把该目录纳入 scope（改 coverage.yaml） |
+| 环境明明装了却标 unverified | 故意的：路径存在≠许可证可用 | 验证一次后更新 capabilities.status |
+
+---
+
+## 6. 快速排障索引
 
 | 症状 | 先查 | 大概率根因 |
 |---|---|---|
@@ -161,10 +215,11 @@ pre-commit 只依赖 git——所以门禁是标配，hook 是增强。
 | 新会话一问三不知 | STATE.md 更新日期 | 过期，让 AI 翻新 |
 | 仓库又变乱 | archive/ 里有没有新文件 | 活跃产出写错区，迁回 scratch |
 | 换机器全失灵 | pre-commit + 解释器路径 | 重跑 bootstrap |
+| AI 把"没查到"说成"不存在" | 世界层没这个对象/关键词 | 登记+补 keywords（§5 的 UNKNOWN 纪律） |
 
 ---
 
-## 6. 学习路径建议
+## 7. 学习路径建议
 
 1. 装一遍（README 三）：跑通 `run_all_checks.py`；
 2. 用一周，让 AI 正常干活，观察它开工读 STATE、收尾登记的行为；
