@@ -4,7 +4,22 @@
   "description": "实验/仿真规格：规定变量、控制量、测量与验收，并要求完整 provenance。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "purpose", "status", "git_commit", "dataset_hash", "config_hash", "environment_lock", "factors", "controlled", "measurements", "predictions", "discriminating_readout", "acceptance"],
+  "required": [
+    "schema_version",
+    "id",
+    "purpose",
+    "status",
+    "git_commit",
+    "dataset_hash",
+    "config_hash",
+    "environment_lock",
+    "factors",
+    "controlled",
+    "measurements",
+    "predictions",
+    "discriminating_readout",
+    "acceptance"
+  ],
   "properties": {
     "schema_version": {
       "const": 1,
@@ -21,7 +36,13 @@
     },
     "status": {
       "type": "string",
-      "enum": ["planned", "running", "complete", "failed", "aborted"],
+      "enum": [
+        "planned",
+        "running",
+        "complete",
+        "failed",
+        "aborted"
+      ],
       "description": "实验状态"
     },
     "git_commit": {
@@ -46,12 +67,57 @@
     },
     "controlled": {
       "type": "object",
-      "description": "被固定的控制量（边界条件、求解器、材料模型、随机种子、设备、精度、输出目录等）"
+      "description": "被固定的控制量（边界条件、求解器、材料模型、随机种子、设备、精度、输出目录等）",
+      "properties": {
+        "solver": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        },
+        "truncation": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        },
+        "wavelength_convention": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        },
+        "polarization": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        },
+        "boundary_conditions": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        },
+        "material_model": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        },
+        "random_seed": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        },
+        "device": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        },
+        "precision": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        },
+        "output_dir": {
+          "type": "string",
+          "description": "不适用写 N/A 并给理由；planned 阶段可整体留待 running 前补全"
+        }
+      },
+      "additionalProperties": false
     },
     "measurements": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "要测量的观测量列表（不得为空）"
     },
     "predictions": {
@@ -65,8 +131,112 @@
     "acceptance": {
       "type": "array",
       "minItems": 1,
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "验收条件（含数值容差，不得为空）"
     }
-  }
+  },
+  "anyOf": [
+    {
+      "properties": {
+        "status": {
+          "const": "planned"
+        }
+      }
+    },
+    {
+      "properties": {
+        "status": {
+          "enum": [
+            "running",
+            "complete",
+            "failed",
+            "aborted"
+          ]
+        },
+        "git_commit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataset_hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "config_hash": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment_lock": {
+          "type": "string",
+          "minLength": 1
+        },
+        "controlled": {
+          "type": "object",
+          "required": [
+            "solver",
+            "truncation",
+            "wavelength_convention",
+            "polarization",
+            "boundary_conditions",
+            "material_model",
+            "random_seed",
+            "device",
+            "precision",
+            "output_dir"
+          ],
+          "properties": {
+            "solver": {
+              "type": "string",
+              "minLength": 1
+            },
+            "truncation": {
+              "type": "string",
+              "minLength": 1
+            },
+            "wavelength_convention": {
+              "type": "string",
+              "minLength": 1
+            },
+            "polarization": {
+              "type": "string",
+              "minLength": 1
+            },
+            "boundary_conditions": {
+              "type": "string",
+              "minLength": 1
+            },
+            "material_model": {
+              "type": "string",
+              "minLength": 1
+            },
+            "random_seed": {
+              "type": "string",
+              "minLength": 1
+            },
+            "device": {
+              "type": "string",
+              "minLength": 1
+            },
+            "precision": {
+              "type": "string",
+              "minLength": 1
+            },
+            "output_dir": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "git_commit",
+        "dataset_hash",
+        "config_hash",
+        "environment_lock",
+        "controlled"
+      ]
+    }
+  ]
 }

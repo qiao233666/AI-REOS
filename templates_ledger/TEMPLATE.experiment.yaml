@@ -2,46 +2,41 @@
 # 字段名与枚举值一律英文，说明文字用中文。规范见 aiops/protocols/experiment-protocol.md，
 # 结构约束见 aiops/schemas/experiment.schema.json。
 #
-# 必须记录的模拟条件（provenance）：
-#   - solver                  求解器（如 RCWA / COMSOL）
-#   - truncation              谐波截断（harmonic truncation）
-#   - wavelength_convention   波长 / 频率约定（单位与定义）
-#   - polarization            偏振（TE/TM/圆偏振等）
-#   - boundary_conditions     边界条件
-#   - material_model          材料模型（色散模型与来源）
-#   - random_seed             随机种子
-#   - device                  设备（CPU/GPU 型号）
-#   - precision               数值精度（float32 / float64）
-#   - output_dir              输出目录
+# 生命周期与 provenance（v1.3.1）：
+#   status: planned          → provenance 允许留空占位，但 running 前必须补全
+#   status: running 及之后    → 下列十项 + 四个溯源字段必须全部非空（校验器强制）
 #
-# 同时请把以上信息登记进 registry.yaml 或外部跟踪系统。
+# 必须记录的模拟条件（provenance，全部为字符串；不适用写 N/A 并给理由）：
+#   solver / truncation / wavelength_convention / polarization / boundary_conditions /
+#   material_model / random_seed / device / precision / output_dir
+#
+# 同时请把以上信息登记进 registry.yaml。
+# 过校验的最低要求：id 为真实 EXP-编号；measurements / acceptance 不得为空列表
+# （实验计划在 planned 阶段就要写明；controlled 十项在 planned 可留空占位）。
 schema_version: 1
 id: EXP-XXX                             # 实验 id，格式 EXP-<至少3位数字>
-purpose: ""                            # 实验目的（要回答的问题）
-status: planned                        # planned|running|complete|failed|aborted
-git_commit: ""                         # 代码提交号
-dataset_hash: ""                       # 数据集哈希
-config_hash: ""                        # 配置哈希
-environment_lock: ""                   # 环境锁定（环境名 / 依赖版本）
+purpose: ""                             # 实验目的（要回答的问题）
+status: planned                         # planned|running|complete|failed|aborted
+git_commit: ""                          # 代码提交号（planned 可空，running 前补全）
+dataset_hash: ""                        # 数据集哈希（同上）
+config_hash: ""                         # 配置哈希（同上）
+environment_lock: ""                    # 环境锁定（环境名 / 依赖版本，同上）
 
-factors: {}                            # 自变量与取值，示例：{h: [0.1, 0.2], vf: [0.3, 0.5]}
+factors: {}                             # 自变量与取值，示例：{h: [0.1, 0.2], vf: [0.3, 0.5]}
 
-controlled:                            # 被固定的控制量
-  boundary_conditions:
-    type: periodic                     # 示例：周期边界
-    domain: unit_cell
-    notes: ""
-  solver: RCWA                         # 求解器
-  truncation: ""                       # 谐波截断（如 "N=15"）
-  wavelength_convention: ""            # 波长 / 频率约定（单位与定义）
-  polarization: ""                     # 偏振（TE/TM/圆偏振等）
-  material_model: ""                   # 材料模型
-  random_seed: null                    # 随机种子
-  device: ""                           # 设备（CPU/GPU 型号）
-  precision: ""                        # 数值精度（float32 / float64）
-  output_dir: ""                       # 输出目录
+controlled:                             # 被固定的控制量——十项全部为字符串，不得用嵌套结构
+  solver: ""                            # 求解器（填写实际求解器名称）
+  truncation: ""                        # 谐波/网格截断（如 "N=15"；不适用写 N/A 并给理由）
+  wavelength_convention: ""             # 波长/频率约定（不适用写 N/A 并给理由）
+  polarization: ""                      # 偏振（不适用写 N/A 并给理由）
+  boundary_conditions: ""               # 边界条件（一句话描述，如 "x/y 周期 + z 顶底自由"）
+  material_model: ""                    # 材料模型（色散模型与来源）
+  random_seed: ""                       # 随机种子（确定性计算写 "N/A（无随机性）"）
+  device: ""                            # 设备（CPU/GPU 型号）
+  precision: ""                         # 数值精度（float32 / float64）
+  output_dir: ""                        # 输出目录
 
-measurements: []                       # 要测量的观测量列表
-predictions: {}                        # 预期结果（用于可证伪的判别）
-discriminating_readout: ""             # 能区分竞争假设的判别读数
-acceptance: []                         # 验收条件（含数值容差）
+measurements: []                        # 要测量的观测量列表（非空）
+predictions: {}                         # 预期结果（用于可证伪的判别）
+discriminating_readout: ""              # 能区分竞争假设的判别读数
+acceptance: []                          # 验收条件（含数值容差）

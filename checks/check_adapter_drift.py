@@ -205,8 +205,10 @@ def _check_zcode_adapter(repo_root: Path) -> int:
     exit_code = 0
     config_path = repo_root / ZCODE_CONFIG_REL
     if not config_path.is_file():
-        _report("FAIL", f"缺少 ZCode 适配配置: {config_path}")
-        return 1
+        # v1.3：ZCode 适配是可选组件（还有 Trae/Cursor 等工具），缺失只提示不判失败；
+        # 但一旦存在，其内部问题（enabled 关闭/变量依赖/脚本缺失）仍是 FAIL。
+        _report("WARN", f"未配置 ZCode 适配（可选）: {config_path}；跳过 ZCode 项")
+        return 0
     try:
         import json
 
@@ -287,10 +289,13 @@ def main(root: Path) -> int:
     print(f"== check_adapter_drift: {adapter_dir} ==")
 
     exit_code = _check_agents(repo_root)
+    # v1.3：ZCode 适配检查接入主流程（此前是定义了但从未调用的死代码——
+    # 强制层"看起来在工作、实际没跑"比缺失更危险）
+    exit_code |= _check_zcode_adapter(repo_root)
 
     if not truth_skills_dir.is_dir():
         _report("FAIL", f"真源技能目录不存在: {truth_skills_dir}")
-        return 1
+        return exit_code
 
     truth_skills = sorted(truth_skills_dir.glob(f"*/{SKILL_FILENAME}"))
     if not truth_skills:

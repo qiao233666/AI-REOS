@@ -8,7 +8,7 @@
             {
               "type": "process",
               "command": "__AIOS_PYTHON__",
-              "args": ["${ZCODE_PROJECT_DIR}/aiops/checks/hooks/session_start_context.py"],
+              "args": ["__AIOS_PROJECT_DIR__/aiops/checks/hooks/session_start_context.py"],
               "timeoutMs": 10000,
               "statusMessage": "AI-REOS: inject state pointer"
             }
@@ -22,7 +22,7 @@
             {
               "type": "process",
               "command": "__AIOS_PYTHON__",
-              "args": ["${ZCODE_PROJECT_DIR}/aiops/checks/hooks/guard_destructive.py"],
+              "args": ["__AIOS_PROJECT_DIR__/aiops/checks/hooks/guard_destructive.py"],
               "timeoutMs": 5000,
               "statusMessage": "AI-REOS: destructive command guard"
             }

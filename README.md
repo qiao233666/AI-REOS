@@ -1,4 +1,4 @@
-# AI-REOS v1.2 安装包（kit）
+# AI-REOS v1.3 安装包（kit）
 
 **AI-REOS** 是一套给"AI 编程助手 + 科研代码仓库"用的治理系统。它解决的问题只有一个：
 **让 AI 长期在同一个项目里工作时，不重复踩坑、不乱改东西、结论有据可查。**
@@ -24,19 +24,22 @@
 ## 二、目录里有什么
 
 ```text
-AI_REOS_kit_v1.2/
+AI_REOS_kit_v1.3.2/
 ├── bootstrap.py                  ← 安装器（唯一需要执行的文件）
 ├── README.md                     ← 本文件（快速上手）
 ├── TUTORIAL.md                   ← 原理教程（四层架构/每层为什么/排障索引）
-├── AI_REOS_MASTER_SPEC_v1.2.md   ← 完整设计规范（参考书）
+├── requirements.txt              ← 可选依赖（PyYAML 必需；jsonschema 启用世界层 schema 校验）
+├── AI_REOS_MASTER_SPEC_v1.2.md   ← 完整设计规范（参考书；Spec 版本与 kit 版本独立）
 ├── AI_REOS_MASTER_SPEC_CHANGELOG.md  ← 版本变更记录
 ├── AI_REOS_MASTER_SPEC_v1.1.original.md ← v1.1 原文（存档）
 │
 ├── protocols/                    ← 7 个工作流程规范（怎么改代码/跑实验/下结论…）
 ├── skills/                       ← 6 个技能（AI 按任务类型路由到对应流程）
-├── schemas/                      ← 4 个数据格式定义（机器校验用）
+├── schemas/                      ← 5 个数据格式定义（机器校验用；v1.3.2 增世界层对象 schema）
 ├── templates/                    ← 决策/证据/交接等模板
 ├── checks/                       ← 校验脚本 + git 门禁 + 守卫 hook（强制层）
+├── tests/                        ← 治理代码回归测试（含世界层 builder/verifier 测试）
+├── world/tools/                  ← 世界观层工具（构建器/校验器/账本分层视图，v1.3.2）
 ├── specs_template/               ← 任务合同模板
 ├── templates_ledger/             ← 实验登记模板
 ├── adapters_templates/           ← 各 AI 工具的适配层模板（Trae/ZCode 等）
@@ -47,25 +50,29 @@ AI_REOS_kit_v1.2/
 
 ## 三、5 分钟安装
 
-前提：目标仓库是个 git 仓库；本机有 Python 3.10+（只需标准库 + PyYAML）。
+前提：目标仓库是个 git 仓库；本机有 Python 3.10+（标准库 + PyYAML；可选 jsonschema）。
 
 ```bash
 cd /path/to/your-repo
-python /path/to/AI_REOS_kit_v1.2/bootstrap.py --dry-run   # 先预览装什么
-python /path/to/AI_REOS_kit_v1.2/bootstrap.py             # 实际安装
+python /path/to/AI_REOS_kit_v1.3.2/bootstrap.py --dry-run   # 先预览装什么
+python /path/to/AI_REOS_kit_v1.3.2/bootstrap.py             # 实际安装
+pip install -r /path/to/AI_REOS_kit_v1.3.2/requirements.txt # 可选依赖（建议）
 ```
 
 bootstrap 会：
-1. 把机制层拷进 `aiops/`（已存在的文件一律跳过，可重复运行）；
+1. 把机制层拷进 `aiops/`（按 manifest 哈希安全升级——账本永不覆盖；托管机制文件未被你修改则自动升级，你改过则生成 `.reos-new` 冲突副本供人工合并）；
 2. 生成账本骨架（STATE/EVIDENCE/DECISIONS/FAILURES/ASSUMPTIONS/TASK_QUEUE/CHARTER）；
-3. 问你要本机 Python 路径，装好 **pre-commit 提交门禁**（以后每次 git commit 自动跑 5 项校验）；
-4. 在根 `AGENTS.md` 追加 AI-REOS 区块（已有区块则只更新该区块，其余不动）。
+3. 生成世界层骨架（`aiops/world/coverage.yaml` + `ledger-policy.yaml`，只补缺失）并生成一次初始视图（v1.3.2）；
+4. 问你要本机 Python 路径，装好 **pre-commit 提交门禁**（以后每次 git commit 自动跑 6 项校验）；
+5. 在根 `AGENTS.md` 追加 AI-REOS 区块（已有区块则只更新该区块，其余不动）。
 
 装完验证：
 
 ```bash
-python aiops/checks/run_all_checks.py    # 应显示 5 项全 PASS
+python aiops/checks/run_all_checks.py    # 应显示 6 项全 PASS（世界层骨架为 report-only）
 ```
+
+**世界层（v1.3.2）是什么**：给项目建一份机器可校验的"世界观索引"——环境（哪个求解器装在哪、许可证是否验证过）、设计文档（哪份任务书在管哪个参数）。AI 判断"某东西存不存在"前先查 `aiops/world/CURRENT.generated.md`，查不到只能记 UNKNOWN，不许推出"不存在"。骨架装好即用（空索引，report-only）；往 `aiops/world/objects/` 登记对象后跑 `python aiops/world/tools/build_world_registry.py` 重建视图即可生长。
 
 ## 四、装完之后，日常怎么用（给人和给 AI 的约定）
 
@@ -104,7 +111,7 @@ python aiops/checks/run_all_checks.py    # 应显示 5 项全 PASS
 ## 七、常见问题
 
 **Q: 会动我已有的配置/代码吗？**
-不会。bootstrap 只新增 `aiops/` 和 `.git/hooks/pre-commit`，追加 AGENTS.md 区块；已有的文件一律跳过。卸载 = 删 `aiops/` + 删 pre-commit hook + 删 AGENTS.md 里的 generated 区块。
+账本（STATE/EVIDENCE/DECISIONS/FAILURES/ASSUMPTIONS/TASK_QUEUE/CHARTER/policy.yaml）永不覆盖；托管机制文件（checks/schemas/protocols/skills/templates/tests）按 manifest 安全升级，你手工改过的会生成 `.reos-new` 冲突副本而不是被覆盖。卸载 = 删 `aiops/` + 删 pre-commit hook + 删 AGENTS.md 里的 generated 区块。
 
 **Q: 我的小项目值得装吗？**
 只要满足：① 用 git；② AI 会反复参与；③ 有数值/实验结果需要可信——就值得。装完体积约 400 KB。

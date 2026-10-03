@@ -1,12 +1,15 @@
 #!/bin/sh
 # AI-REOS Tier-0 校验门禁：提交前运行 aiops/checks/run_all_checks.py。
 #
-# 本文件是**版本化副本**，实际生效位置是 .git/hooks/pre-commit。
-# 重新安装：python aiops/checks/install_hooks.py
+# 本文件是**版本化模板**：aiops/checks/hooks/pre-commit 里的 __AIOS_PYTHON__
+# 占位符由 bootstrap 渲染后写入 <git-dir>/hooks/pre-commit（worktree 兼容）。
+# 重新安装/换解释器：重跑 bootstrap（v1.3 起占位符不再被回写，可重复渲染）。
 # 临时跳过：git commit --no-verify
+# 用户自有 hook：安装时被备份为 pre-commit.user.bak，本门禁通过后链式调用它。
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
 [ -n "$REPO_ROOT" ] || exit 0
+HOOKDIR="$(git rev-parse --git-path hooks 2>/dev/null)" || HOOKDIR=".git/hooks"
 
 PY="${AIOS_PYTHON:-}"
 if [ -z "$PY" ]; then
@@ -26,3 +29,11 @@ if ! "$PY" "$REPO_ROOT/aiops/checks/run_all_checks.py"; then
   printf '  修复后重试；确需跳过时使用：git commit --no-verify\n'
   exit 1
 fi
+
+# 链式调用用户既有 hook（AI-REOS 安装前就在的），保持其行为不丢失
+USER_HOOK="$HOOKDIR/pre-commit.user.bak"
+if [ -x "$USER_HOOK" ]; then
+  "$USER_HOOK" "$@" || exit 1
+fi
+
+exit 0

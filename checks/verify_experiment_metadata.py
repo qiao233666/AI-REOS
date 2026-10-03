@@ -203,7 +203,20 @@ def main(root: Path) -> int:
 
     files = _collect_experiment_files(experiments_dir)
     if not files:
-        _report("WARN", "实验目录为空，未发现实验元数据文件，跳过逐条校验")
+        # v1.3：空目录不再无条件通过——registry 登记了却无文件的"幽灵实验"必须报 FAIL
+        registry_path = experiments_dir / REGISTRY_FILENAME
+        reg_ok, registry_payload = _load_yaml_file(registry_path)
+        ghost_ids: Set[str] = set()
+        if reg_ok and registry_payload is not None:
+            ids = _extract_registry_ids(registry_payload)
+            if ids:
+                ghost_ids = ids
+        if ghost_ids:
+            for ghost in sorted(ghost_ids):
+                _report("FAIL", f"registry.yaml 登记了 {ghost} 但实验目录中无对应元数据文件（幽灵实验）")
+            _report("FAIL", "汇总: 实验元数据校验存在失败项")
+            return 1
+        _report("WARN", "实验目录为空且 registry 无登记，跳过逐条校验")
         _report("OK", "汇总: 实验元数据校验通过")
         return 0
 

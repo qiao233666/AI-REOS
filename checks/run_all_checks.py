@@ -3,7 +3,7 @@ AI-REOS 校验统一入口（Tier 0）。
 
 用途
 ----
-一次运行全部检查，供人工执行或 pre-commit hook 调用，避免"要记住 5 个脚本名分别手动跑"。
+一次运行全部检查，供人工执行或 pre-commit hook 调用，避免"要记住多个脚本名分别手动跑"。
 本身不重复实现任何校验逻辑，只负责调度同目录下的各检查模块并汇总结果。
 
 检查清单
@@ -13,6 +13,9 @@ AI-REOS 校验统一入口（Tier 0）。
 - verify_experiment_metadata 实验元数据按 schema 校验 + registry 一致性
 - verify_claims              claim 按 schema 校验 + "fact 必须有 Evidence"规则
 - check_adapter_drift        .trae 薄包装与 AGENTS.md generated 区块是否与真源漂移
+- verify_world_registry      世界观层一致性 + 三条召回探针（v1.3.2；world 未部署自动跳过，
+                              模式由 aiops/world/coverage.yaml 的 coverage.status 决定：
+                              partial=report-only，full=enforce）
 
 设计说明
 --------
@@ -31,6 +34,7 @@ import verify_ai_state
 import verify_claims
 import verify_experiment_metadata
 import verify_task_specs
+import verify_world_registry_entry
 
 # 模块级配置：检查项清单集中定义，新增检查在此登记即可
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -42,6 +46,7 @@ CHECKS: Tuple[Tuple[str, Callable[[Path], int]], ...] = (
     ("verify_experiment_metadata", verify_experiment_metadata.main),
     ("verify_claims", verify_claims.main),
     ("check_adapter_drift", check_adapter_drift.main),
+    ("verify_world_registry", verify_world_registry_entry.main),
 )
 
 

@@ -32,6 +32,9 @@ SCHEMAS_DIRNAME = "schemas"
 TASK_SCHEMA_FILENAME = "task.schema.json"
 SPECS_DIRNAME = "specs"
 EXCLUDED_NAME_PREFIXES: Tuple[str, ...] = ("TEMPLATE.",)
+# v1.3：*.example.yaml 是文档示例，不是真实任务
+# kit 示例文件两种命名形态都排除（v1.3 实测：complete-example.yaml 不匹配 .example.yaml 后缀）
+EXCLUDED_NAME_SUFFIXES: Tuple[str, ...] = (".example.yaml", "-example.yaml")
 
 COMPLETE_STATUS = "complete"
 PENDING_RESULT = "pending"
@@ -87,7 +90,9 @@ def _collect_spec_files(specs_dir: Path) -> List[Path]:
     """收集除 TEMPLATE.* 之外的 Task Spec 文件。"""
     files: List[Path] = []
     for path in sorted(specs_dir.glob("*.yaml")):
-        if path.name.startswith(EXCLUDED_NAME_PREFIXES):
+        if path.name.startswith(EXCLUDED_NAME_PREFIXES) or path.name.endswith(
+            EXCLUDED_NAME_SUFFIXES
+        ):
             continue
         files.append(path)
     return files

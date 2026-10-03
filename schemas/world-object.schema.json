@@ -1,0 +1,134 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WorldObject",
+  "description": "AI-REOS 世界观层单对象（E-083 第四轮结构性方案）。一对象一文件，slug ID 稳定不用最大号+1。canonical 层：人工/半自动维护；机器视图由 build_world_registry.py 生成禁手改。权威正交：Task 管意图、Decision 管采纳、Evidence 管事实，本对象只管身份/发现/适用范围/生命周期。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "object_id", "kind", "title", "sources", "authority", "lifecycle", "provenance"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "object_id": {
+      "type": "string",
+      "pattern": "^(design|environment)--[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "格式 <kind>--<slug>；slug 小写连字符，稳定不变"
+    },
+    "kind": {"enum": ["design", "environment"]},
+    "title": {"type": "string", "minLength": 1},
+    "sources": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["path", "role"],
+        "properties": {
+          "path": {"type": "string", "minLength": 1, "description": "仓库相对路径，正斜杠"},
+          "role": {"enum": ["primary", "attachment"]}
+        }
+      }
+    },
+    "authority": {
+      "type": "object", "additionalProperties": false,
+      "required": ["level", "granted_by"],
+      "properties": {
+        "level": {"enum": ["binding", "advisory", "historical"],
+                   "description": "binding=约束未来执行的已采纳设计；advisory=参考；historical=仅存档"},
+        "granted_by": {"type": "string", "minLength": 1,
+                        "description": "授权来源 ID（T-xxx/D-xxx/E-xxx），采纳必须可溯源"}
+      }
+    },
+    "lifecycle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["unclassified", "draft", "adopted", "superseded", "retired"]},
+        "effective_from": {"type": "string", "description": "YYYY-MM-DD，adopted 时必填（checker 校验）"},
+        "supersedes": {"type": "array", "items": {"type": "string"}, "description": "被替代的 object_id 列表，checker 查悬空/环"},
+        "accepted_digest": {
+          "type": "object", "additionalProperties": false,
+          "description": "人工显式复核过的源文件哈希；生成器绝不自动批准新哈希",
+          "patternProperties": {"^[^:]+$": {"type": "string", "pattern": "^[0-9a-f]{64}$"}},
+          "minProperties": 1
+        }
+      }
+    },
+    "applies_to": {
+      "type": "object", "additionalProperties": false,
+      "description": "适用范围声明（advisory/binding 对象建议填写；checker 只对 adopted+bindings 强制）",
+      "properties": {
+        "tasks": {"type": "array", "items": {"type": "string"}},
+        "components": {"type": "array", "items": {"type": "string"}},
+        "workflows": {"type": "array", "items": {"type": "string"}},
+        "conditions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "bindings": {
+      "type": "array",
+      "description": "章节级绑定：同一文档不同章节可分别处于不同状态（E-083 设计要点）",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["selector", "purpose", "status"],
+        "properties": {
+          "selector": {"type": "string", "minLength": 1, "description": "章节定位（如 '§3.6' 'P-D'）"},
+          "purpose": {"type": "string", "minLength": 1},
+          "status": {"enum": ["adopted", "draft", "superseded"]},
+          "keywords": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "authority_ref": {"type": "string", "description": "adopted 时必填"}
+        }
+      }
+    },
+    "relations": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["type", "target"],
+        "properties": {
+          "type": {"enum": ["supersedes", "depends_on", "relates_to", "implements"]},
+          "target": {"type": "string", "description": "object_id 或账本 ID"},
+          "scope": {"type": "string"}
+        }
+      }
+    },
+    "evidence_refs": {"type": "array", "items": {"type": "string", "pattern": "^E-[0-9]{3,}$"}},
+    "freshness": {
+      "type": "object", "additionalProperties": false,
+      "description": "新鲜度契约（假设 D：索引必须声明覆盖范围与过期语义）",
+      "properties": {
+        "mode": {"enum": ["none", "expires", "on_source_change"]},
+        "max_age_days": {"type": "integer", "minimum": 1}
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "仅 kind=environment：能力观察记录。有效状态由时间与 Evidence 推导，过期即 stale/UNKNOWN；安装路径存在≠许可证可用",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["host_id", "capability", "status", "observed_at"],
+        "properties": {
+          "host_id": {"type": "string", "minLength": 1},
+          "capability": {"type": "string", "minLength": 1},
+          "status": {"enum": ["observed", "unverified", "stale"]},
+          "evidence_ref": {"type": "string", "description": "观察依据（E-xxx 或文档路径）"},
+          "observed_at": {"type": "string", "description": "YYYY-MM-DD"},
+          "expires_at": {"type": "string", "description": "YYYY-MM-DD，过期后 checker 报 stale"}
+        }
+      }
+    },
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["owner", "declared_at"],
+      "properties": {
+        "owner": {"type": "string", "minLength": 1},
+        "declared_at": {"type": "string", "description": "YYYY-MM-DD"}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "environment"}}, "required": ["kind"]},
+      "then": {"required": ["capabilities"], "properties": {"capabilities": {"minItems": 1}}}
+    },
+    {
+      "if": {"properties": {"lifecycle": {"properties": {"status": {"const": "adopted"}}}}, "required": ["lifecycle"]},
+      "then": {"properties": {"lifecycle": {"required": ["status", "effective_from"]}}}
+    }
+  ]
+}

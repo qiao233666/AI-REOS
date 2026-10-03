@@ -94,7 +94,7 @@ pre-commit 只依赖 git——所以门禁是标配，hook 是增强。
 | 改了 aiops 却没被拦/没被查 | schema 没覆盖新字段 | 在 `schemas/` 对应 schema 加字段定义 |
 | 守卫误拦正常命令 | 字面匹配太宽（如 heredoc 提及保护词） | 精简 guard 脚本的保护词规则，并在 FAILURES 记案例 |
 | 守卫该拦没拦 | 它只拦删除不拦写入（设计边界） | 写路径治理靠目录规则 + 每周反向扫描，别指望 hook 万能 |
-| 换机器后门禁不跑了 | pre-commit 没装/解释器路径不对 | 重跑 bootstrap 或 `aiops/checks/install_hooks.py` |
+| 换机器后门禁不跑了 | pre-commit 没装/解释器路径不对 | 重跑 bootstrap（v1.3.1 起已无 install_hooks.py，统一由 bootstrap 渲染安装） |
 
 ---
 

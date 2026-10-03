@@ -1,0 +1,30 @@
+# AI-REOS CI 门禁（可选组件）
+# 用法：把本文件复制到目标仓库 .github/workflows/ai-reos.yml 即可。
+# 作用：PR 与主分支推送时强制跑 aiops/checks/run_all_checks.py + 治理代码单测——
+# pre-commit 可被 --no-verify 绕过、新 clone 可能没装 hook，CI 才是最终门禁（Master Spec §14）。
+name: ai-reos-checks
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install PyYAML
+        run: pip install pyyaml
+      - name: Run governance checks
+        run: python aiops/checks/run_all_checks.py
+      - name: Run governance unit tests
+        run: |
+          if [ -d aiops/tests ]; then
+            python -m unittest discover -s aiops/tests -p "test_*.py" || exit 1
+          else
+            echo "no aiops/tests dir (old install), skip"
+          fi

@@ -4,7 +4,16 @@
   "description": "任务规格：规定 WHAT/WHY/SCOPE/ACCEPTANCE 及预算与收敛要求。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "title", "status", "objective", "scope", "acceptance", "verification"],
+  "required": [
+    "schema_version",
+    "id",
+    "title",
+    "status",
+    "objective",
+    "scope",
+    "acceptance",
+    "verification"
+  ],
   "properties": {
     "schema_version": {
       "const": 1,
@@ -21,12 +30,24 @@
     },
     "status": {
       "type": "string",
-      "enum": ["draft", "ready", "running", "blocked", "complete", "aborted"],
+      "enum": [
+        "draft",
+        "ready",
+        "running",
+        "blocked",
+        "complete",
+        "aborted"
+      ],
       "description": "任务状态"
     },
     "priority": {
       "type": "string",
-      "enum": ["low", "normal", "high"],
+      "enum": [
+        "low",
+        "medium",
+        "normal",
+        "high"
+      ],
       "description": "优先级"
     },
     "owner": {
@@ -36,7 +57,10 @@
     "objective": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["primary", "why"],
+      "required": [
+        "primary",
+        "why"
+      ],
       "description": "目标：交付什么以及为什么",
       "properties": {
         "primary": {
@@ -56,17 +80,23 @@
       "properties": {
         "files": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "允许读取的文件"
         },
         "evidence": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "可用 Evidence id（E-###）"
         },
         "external_sources": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "可靠外部来源（文献/URL）"
         }
       }
@@ -74,34 +104,47 @@
     "scope": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["include", "exclude"],
+      "required": [
+        "include",
+        "exclude"
+      ],
       "description": "范围：做与不做",
       "properties": {
         "include": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "本次要做的范围"
         },
         "exclude": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "明确不做的范围"
         },
         "actual_deviations": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "执行中与原计划的偏差及原因（收尾时回填；无偏差可省略）"
         }
       }
     },
     "constraints": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "硬性约束（禁止改动、环境、编译器路径等）"
     },
     "assumptions": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "显式假设，不得隐含"
     },
     "risk": {
@@ -111,12 +154,18 @@
       "properties": {
         "level": {
           "type": "string",
-          "enum": ["low", "medium", "high"],
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
           "description": "风险等级"
         },
         "approval_required_for": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "需要人工批准的项"
         }
       }
@@ -131,18 +180,26 @@
           "description": "是否需要 Plan"
         },
         "file": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "计划文件路径，无则 null"
         },
         "trigger_reason": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "触发 Plan 的原因"
         }
       }
     },
     "acceptance": {
       "type": "array",
-      "items": { "type": "string" },
+      "items": {
+        "type": "string"
+      },
       "description": "可复算、可判定的验收条件"
     },
     "verification": {
@@ -152,12 +209,16 @@
       "properties": {
         "commands": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "验收命令列表"
         },
         "invariants": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "不变量（数值容差、守恒量等）"
         }
       }
@@ -169,7 +230,9 @@
       "properties": {
         "files": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "预期产出文件"
         },
         "response_schema": {
@@ -184,32 +247,52 @@
       "description": "预算上限",
       "properties": {
         "max_subagents": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "description": "允许派生的子 Agent 数上限"
         },
         "max_output_tokens": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "description": "返回 token 上限"
         },
         "max_tool_calls": {
-          "type": ["integer", "null"],
+          "type": [
+            "integer",
+            "null"
+          ],
           "description": "工具调用上限"
         },
         "max_wall_time_minutes": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "description": "墙钟时间上限（分钟）"
         },
         "max_cpu_hours": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "description": "CPU 小时上限"
         },
         "max_gpu_hours": {
-          "type": ["number", "null"],
+          "type": [
+            "number",
+            "null"
+          ],
           "description": "GPU 小时上限"
         },
         "escalation_conditions": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "升级（转人工）条件"
         }
       }
@@ -224,17 +307,27 @@
           "description": "是否以收敛结论为目标"
         },
         "trigger_reason": {
-          "type": ["string", "null"],
+          "type": [
+            "string",
+            "null"
+          ],
           "description": "触发 Converge 的原因"
         },
         "result": {
           "type": "string",
-          "enum": ["pending", "converged", "not_converged", "inconclusive"],
+          "enum": [
+            "pending",
+            "converged",
+            "not_converged",
+            "inconclusive"
+          ],
           "description": "收敛结果（未收敛不得当作连续介质极限）"
         },
         "gaps": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "距收敛还差什么"
         }
       }

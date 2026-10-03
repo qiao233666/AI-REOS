@@ -22,7 +22,9 @@ CONTEXT = """[AI-REOS 自动注入] 本仓库的跨工具治理真源是 aiops/�
 - 要改代码 → aiops/protocols/code-change-protocol.md；要跑仿真/批量实验 → aiops/protocols/experiment-protocol.md
 - 派子代理 → aiops/protocols/subagent-contract.md；任务交接 → aiops/protocols/handoff-protocol.md
 - 依据不充分的前提 → aiops/ASSUMPTIONS.md；历史决策 → aiops/DECISIONS.md
-收尾前：提交由 pre-commit 门禁自动跑 aiops/checks/run_all_checks.py（5 项校验）。
+- 判断环境/工具/数据/历史方案"是否存在"或要实现/改写既有设计 → 先查 aiops/world/CURRENT.generated.md（世界层，含检索关键词）；
+  未命中只能记 UNKNOWN，禁止推出"不存在"（F-015 教训）；再按需 grep aiops/ 与 docs/design/
+收尾前：提交由 pre-commit 门禁自动跑 aiops/checks/run_all_checks.py（校验项清单以该文件 CHECKS 为准）。
 禁止未经批准删除/覆盖 results/、outputs/、data/、archive/、runs/、model_parameters/ 等结果目录
 （ZCode 侧由 PreToolUse 守卫 hook 程序化拦截；守卫脚本：aiops/checks/hooks/guard_destructive.py）。"""
 

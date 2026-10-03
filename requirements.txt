@@ -1,0 +1,4 @@
+# AI-REOS kit v1.3.2 运行依赖（安装目标环境）
+# PyYAML：校验器与构建器必需；jsonschema：世界层 schema 动态校验（缺省跳过并告警，不阻塞）
+PyYAML>=5.4
+jsonschema>=4.0

@@ -10,7 +10,7 @@ aiops 的哪个文件），不复制正文，因此不会漂移。按你实际�
 
 ## 1. ZCode（`.zcode/config.json`）— 确定性最高
 
-复制 `zcode-config.example.json` 为 `<repo>/.zcode/config.json`，改两处解释器路径。
+复制 `zcode-config.example.json` 为 `<repo>/.zcode/config.json`，把其中的 `__AIOS_PYTHON__`（解释器绝对路径）与 `__AIOS_PROJECT_DIR__`（仓库绝对路径）替换掉——**必须用绝对路径**：D-017 实测 `${ZCODE_PROJECT_DIR}` 变量在会话中途 cd 后会解析到错误位置，曾造成 hook 死锁，`check_adapter_drift.py` 会直接拒绝变量写法。
 效果：
 - **SessionStart**：每次会话自动注入状态指针（读 STATE.md + 触发表）；
 - **PreToolUse(Bash)**：对结果目录的破坏性删除命令程序化拒绝；

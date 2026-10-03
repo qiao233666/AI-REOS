@@ -4,7 +4,17 @@
   "description": "单条证据：仅记录数据直接支持的陈述，不夹带因果解释。",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "id", "type", "statement", "source", "status"],
+  "required": [
+    "schema_version",
+    "id",
+    "type",
+    "statement",
+    "source",
+    "scope",
+    "limitations",
+    "status",
+    "recorded_at"
+  ],
   "properties": {
     "schema_version": {
       "const": 1,
@@ -17,30 +27,43 @@
     },
     "type": {
       "type": "string",
-      "enum": ["observation", "measurement", "reference", "artifact"],
+      "enum": [
+        "observation",
+        "measurement",
+        "reference",
+        "artifact"
+      ],
       "description": "证据类型"
     },
     "statement": {
       "type": "string",
-      "description": "仅写数据直接支持的陈述，不得夹带因果或机制解释"
+      "description": "仅写数据直接支持的陈述，不得夹带因果或机制解释",
+      "minLength": 8
     },
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["file", "script", "git_commit"],
+      "required": [
+        "file",
+        "script",
+        "git_commit"
+      ],
       "description": "可复算来源",
       "properties": {
         "file": {
           "type": "string",
-          "description": "数据 / 文献文件路径"
+          "description": "数据 / 文献文件路径",
+          "minLength": 1
         },
         "script": {
           "type": "string",
-          "description": "生成该数据的脚本路径"
+          "description": "生成该数据的脚本路径",
+          "minLength": 1
         },
         "git_commit": {
           "type": "string",
-          "description": "对应的提交号"
+          "description": "对应的提交号",
+          "minLength": 1
         }
       }
     },
@@ -51,7 +74,9 @@
       "properties": {
         "cases": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "适用案例列表"
         },
         "parameter_range": {
@@ -62,17 +87,25 @@
     },
     "limitations": {
       "type": "array",
-      "items": { "type": "string" },
-      "description": "已知局限（外推风险、未覆盖情形）"
+      "items": {
+        "type": "string"
+      },
+      "description": "已知局限（外推风险、未覆盖情形）",
+      "minItems": 1
     },
     "status": {
       "type": "string",
-      "enum": ["active", "deprecated", "superseded"],
+      "enum": [
+        "active",
+        "deprecated",
+        "superseded"
+      ],
       "description": "证据状态"
     },
     "recorded_at": {
       "type": "string",
-      "description": "记录日期（YYYY-MM-DD）"
+      "description": "记录日期（YYYY-MM-DD）",
+      "minLength": 4
     }
   }
 }

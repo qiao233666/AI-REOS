@@ -42,6 +42,9 @@ SUPPORTED_KEYWORDS = frozenset(
         "additionalProperties",
         "items",
         "minItems",
+        "minLength",
+        "maxLength",
+        "anyOf",
         "enum",
         "const",
         "pattern",
@@ -146,6 +149,12 @@ def find_unsupported_keywords(schema: object, pointer: str = "$") -> List[str]:
         if keyword == "items":
             problems.extend(find_unsupported_keywords(value, f"{pointer}.items"))
             continue
+        if keyword == "anyOf" and isinstance(value, list):
+            for index, sub_schema in enumerate(value):
+                problems.extend(
+                    find_unsupported_keywords(sub_schema, f"{pointer}.anyOf[{index}]")
+                )
+            continue
         if keyword in SUPPORTED_KEYWORDS:
             continue
         problems.append(f"{pointer} 使用了不支持的 JSON Schema 关键字: {keyword}")
@@ -231,5 +240,35 @@ def validate(instance: object, schema: object, pointer: str = "$") -> List[str]:
             errors.append(
                 f"{pointer}: 列表长度 {len(instance)} 小于 minItems={schema['minItems']}（不得为空列表）"
             )
+
+    if "minLength" in schema or "maxLength" in schema:
+        # YAML 未加引号日期会被解析成日期对象，按 string 宽松处理时同样豁免长度校验
+        is_text = isinstance(instance, str) or isinstance(
+            instance, (datetime.date, datetime.datetime)
+        )
+        if not is_text:
+            errors.append(
+                f"{pointer}: minLength/maxLength 仅适用于字符串，实际为 {_type_name(instance)}"
+            )
+        else:
+            text = instance.isoformat() if hasattr(instance, "isoformat") else str(instance)
+            if "minLength" in schema and len(text) < schema["minLength"]:
+                errors.append(
+                    f"{pointer}: 字符串长度 {len(text)} 小于 minLength={schema['minLength']}（不得为空/过短）"
+                )
+            if "maxLength" in schema and len(text) > schema["maxLength"]:
+                errors.append(
+                    f"{pointer}: 字符串长度 {len(text)} 大于 maxLength={schema['maxLength']}"
+                )
+
+    if "anyOf" in schema and isinstance(schema["anyOf"], list):
+        branches = schema["anyOf"]
+        results = [validate(instance, branch, pointer) for branch in branches]
+        if not any(not errs for errs in results):
+            detail = "; ".join(
+                f"分支[{i}]：{'、'.join(errs) if errs else '通过'}"
+                for i, errs in enumerate(results)
+            )
+            errors.append(f"{pointer}: 不满足 anyOf 任一分支（{detail}）")
 
     return errors

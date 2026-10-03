@@ -10,7 +10,9 @@ claim 记录一致性校验脚本。
 supports / limitations 类型均来自 schema 文件），并补充 schema 之外的语义规则：
 
 - **科学 CI 核心规则**：`classification == fact` 时 `supports` 不得为空
-  （不得存在无 Evidence 支撑的事实性断言）。
+  （不得存在无 Evidence 支撑的事实性断言）；
+- **引用完整性（v1.3）**：`supports` 里每个 E-xxx 必须真实存在于 `aiops/EVIDENCE.yaml`
+  且 `status: active`——编造 id 或引用已废弃证据均判 FAIL。
 
 只依赖 PyYAML 与标准库；对外暴露 main(root: Path) -> int 以便复用。
 """
@@ -18,7 +20,7 @@ supports / limitations 类型均来自 schema 文件），并补充 schema 之�
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Set, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 import yaml
 
@@ -32,6 +34,7 @@ SCHEMAS_DIRNAME = "schemas"
 CLAIM_SCHEMA_FILENAME = "claim.schema.json"
 CLAIM_FILE_PATTERNS: Tuple[str, ...] = ("claims*.yaml", "C-*.yaml")
 FACT_CLASSIFICATION = "fact"
+EVIDENCE_FILENAME = "EVIDENCE.yaml"
 
 
 def _report(prefix: str, message: str) -> None:
@@ -108,7 +111,39 @@ def _iter_claims(payload: object) -> Optional[List[object]]:
     return None
 
 
-def _validate_claim(record: object, path: Path, index: int, schema: object) -> int:
+def _load_evidence_index(root: Path) -> Tuple[int, Optional[Dict[str, str]]]:
+    """
+    读取 aiops/EVIDENCE.yaml，返回 {证据 id: status} 索引。
+
+    Returns
+    -------
+    exit_code : int
+        0 表示索引可用；1 表示文件缺失或不可解析（此时无法核对引用，调用方判 FAIL）。
+    index : Optional[Dict[str, str]]
+        id -> status 映射；失败时为 None。
+    """
+    path = root / EVIDENCE_FILENAME
+    if not path.is_file():
+        _report("FAIL", f"缺少证据账本，无法核对 claim 引用: {path}")
+        return 1, None
+    ok, payload = _load_yaml_file(path)
+    if not ok or not isinstance(payload, list):
+        _report("FAIL", f"{EVIDENCE_FILENAME} 缺失或不是记录列表，无法核对 claim 引用")
+        return 1, None
+    index: Dict[str, str] = {}
+    for entry in payload:
+        if isinstance(entry, dict) and isinstance(entry.get("id"), str):
+            index[entry["id"]] = str(entry.get("status", ""))
+    return 0, index
+
+
+def _validate_claim(
+    record: object,
+    path: Path,
+    index: int,
+    schema: object,
+    evidence_index: Optional[Dict[str, str]],
+) -> int:
     """校验单条 claim 记录，返回退出码增量。"""
     location = f"{path.name} 第 {index} 条"
     if not isinstance(record, dict):
@@ -121,19 +156,38 @@ def _validate_claim(record: object, path: Path, index: int, schema: object) -> i
         _report("FAIL", message)
         exit_code = 1
 
-    # 语义规则：事实性断言必须有 Evidence 支撑（schema 无法表达这种跨字段约束）
+    # 语义规则 1：事实性断言必须有 Evidence 支撑（schema 无法表达这种跨字段约束）
     if record.get("classification") == FACT_CLASSIFICATION:
         supports = record.get("supports")
         if isinstance(supports, list) and not supports:
             _report("FAIL", f"{location} classification 为 fact 但 supports 为空")
             exit_code = 1
 
+    # 语义规则 2（v1.3）：引用完整性——supports 里的证据必须存在且 active
+    supports = record.get("supports")
+    if isinstance(supports, list) and evidence_index is not None:
+        for sid in supports:
+            if not isinstance(sid, str):
+                continue
+            if sid not in evidence_index:
+                _report("FAIL", f"{location} 引用了不存在的证据 id: {sid}")
+                exit_code = 1
+            elif evidence_index[sid] != "active":
+                _report(
+                    "FAIL",
+                    f"{location} 引用的证据 {sid} 状态为 {evidence_index[sid]!r}"
+                    "（非 active），事实性断言不得依赖已废弃/被取代的证据",
+                )
+                exit_code = 1
+
     if exit_code == 0:
         _report("OK", f"{location} 按 schema 校验通过: {record.get('claim_id')}")
     return exit_code
 
 
-def _validate_claim_file(path: Path, schema: object) -> int:
+def _validate_claim_file(
+    path: Path, schema: object, evidence_index: Optional[Dict[str, str]]
+) -> int:
     """校验单个 claim 文件，返回退出码增量。"""
     ok, payload = _load_yaml_file(path)
     if not ok:
@@ -148,7 +202,7 @@ def _validate_claim_file(path: Path, schema: object) -> int:
         return 0
     exit_code = 0
     for index, record in enumerate(claims):
-        exit_code |= _validate_claim(record, path, index, schema)
+        exit_code |= _validate_claim(record, path, index, schema, evidence_index)
     return exit_code
 
 
@@ -179,9 +233,10 @@ def main(root: Path) -> int:
         _report("FAIL", "汇总: claim 校验存在失败项")
         return schema_code
 
-    exit_code = 0
+    ev_code, evidence_index = _load_evidence_index(root)
+    exit_code = ev_code
     for path in claim_files:
-        exit_code |= _validate_claim_file(path, schema)
+        exit_code |= _validate_claim_file(path, schema, evidence_index)
 
     if exit_code == 0:
         _report("OK", f"汇总: claim 校验全部通过，共 {len(claim_files)} 个文件")
