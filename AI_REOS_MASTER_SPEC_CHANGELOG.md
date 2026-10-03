@@ -181,3 +181,9 @@
   不变（纯文档修订）。
 - **发布通道（2026-10-04）**：GitHub 仓库 qiao233666/AI-REOS + 一键镜像发布脚本
   （源头项目 dist/publish_to_github.py，见 HOW_TO_UPLOAD_GITHUB.md）。
+- **写路径约束（2026-10-04，F-016 事故修复/T-054）**：AGENTS.md generated 区块与
+  SessionStart 注入各增一条——跨会话/跨工具需持久的项目事实/教训/裁定唯一真源是
+  `aiops/` 账本（教训→FAILURES.md），AI 工具私有记忆只放工作偏好，不得存放项目事实。
+  背景：实测发现某 AI 把 GPU 吞吐教训写进工具私有记忆，治理真源未收到（首例写失效）。
+- **schema 扩展（2026-10-04，T-053）**：world-object.schema.json 增 kind=record
+  （记录类：交接/留痕/简报/对话，参考非约束），源头项目 docs/notes 33 篇已全量登记。

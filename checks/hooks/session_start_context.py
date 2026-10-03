@@ -22,6 +22,7 @@ CONTEXT = """[AI-REOS 自动注入] 本仓库的跨工具治理真源是 aiops/�
 - 要改代码 → aiops/protocols/code-change-protocol.md；要跑仿真/批量实验 → aiops/protocols/experiment-protocol.md
 - 派子代理 → aiops/protocols/subagent-contract.md；任务交接 → aiops/protocols/handoff-protocol.md
 - 依据不充分的前提 → aiops/ASSUMPTIONS.md；历史决策 → aiops/DECISIONS.md
+- 踩了坑/要记教训 → aiops/FAILURES.md（先查最大号防撞号）；跨工具要持久的教训**不写任何 AI 工具的私有记忆**（那是偏好备忘，不是项目真源，F-016 教训）。
 - 判断环境/工具/数据/历史方案"是否存在"或要实现/改写既有设计 → 先查 aiops/world/CURRENT.generated.md（世界层，含检索关键词）；
   未命中只能记 UNKNOWN，禁止推出"不存在"（F-015 教训）；再按需 grep aiops/ 与 docs/design/
 收尾前：提交由 pre-commit 门禁自动跑 aiops/checks/run_all_checks.py（校验项清单以该文件 CHECKS 为准）。

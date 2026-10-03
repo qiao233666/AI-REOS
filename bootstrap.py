@@ -117,6 +117,7 @@ python aiops/checks/run_all_checks.py
 Do not load the full repository or all project documentation by default. Use `aiops/STATE.md` for orientation, then retrieve only task-relevant evidence and files.
 
 - 判断环境/工具/数据/历史方案"是否存在"或要实现/改写既有设计 → 先查 `aiops/world/CURRENT.generated.md`（世界层，含检索关键词）；未命中只能记 UNKNOWN，禁止推出"不存在"。
+- 跨会话/跨工具需要持久的项目事实、教训、裁定，唯一真源是 `aiops/` 账本（教训→`FAILURES.md`，结论→`EVIDENCE.yaml`）；AI 工具的私有记忆/备忘录只放工作偏好，**不得存放项目事实**。
 {end}"""
 
 OVERRIDES_BLOCK = """
