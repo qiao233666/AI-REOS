@@ -24,7 +24,7 @@ CONTEXT = """[AI-REOS 自动注入] 本仓库的跨工具治理真源是 aiops/�
 - 依据不充分的前提 → aiops/ASSUMPTIONS.md；历史决策 → aiops/DECISIONS.md
 - 踩了坑/要记教训 → aiops/FAILURES.md（先查最大号防撞号）；跨工具要持久的教训**不写任何 AI 工具的私有记忆**（那是偏好备忘，不是项目真源，F-016 教训）。
 - 判断环境/工具/数据/历史方案"是否存在"或要实现/改写既有设计 → 先查 aiops/world/CURRENT.generated.md（世界层，含检索关键词）；
-  未命中只能记 UNKNOWN，禁止推出"不存在"（F-015 教训）；再按需 grep aiops/ 与 docs/design/
+  未命中只能记 UNKNOWN，禁止推出"不存在"（F-015 教训）；再按需 grep aiops/ docs/design/ 与本地代码模板/注释——API 特征 ID 等契约细节常沉淀在模板注释（F-015 复发教训）
 - 新的约束性合同/方案书（spec/协议/决策稿）定稿或升版时 → **同次登记世界层对象**（draft+digest 锚定）；写在 scratch 下的约束合同尤其如此，别让它对世界层不可见（runner spec 遗漏事故，2026-10-04）。
 收尾前：提交由 pre-commit 门禁自动跑 aiops/checks/run_all_checks.py（校验项清单以该文件 CHECKS 为准）。
 禁止未经批准删除/覆盖 results/、outputs/、data/、archive/、runs/、model_parameters/ 等结果目录
