@@ -62,11 +62,24 @@ def derive_status(obj: dict) -> dict:
             out["digest_state"] = "verified"
         else:
             out["digest_state"] = "stale_pending_review"  # 实质修改触发待复核（E-083 写入契约）
-    # 环境对象：capabilities 过期 → stale/UNKNOWN（假设 D 契约）
+    # 环境对象：capabilities 过期 → stale/UNKNOWN（假设 D 契约；SOL57 审查修复：
+    # 此前 expires_at 只展示不判定——现将到期条目按 stale 参与 all() 判定）
     if obj.get("kind") == "environment":
+        import datetime
+        today = datetime.date.today().isoformat()
         caps = obj.get("capabilities", [])
-        if caps and all(c.get("status") == "stale" for c in caps):
+        caps_eff = [
+            {**c, "status": "stale"}
+            if c.get("expires_at") and c["expires_at"] < today and c.get("status") != "stale"
+            else c
+            for c in caps
+        ]
+        if caps and all(c.get("status") == "stale" for c in caps_eff):
             out["effective_status"] = "stale"
+        expired = [c.get("capability", "")[:40] for c in caps_eff if c.get("status") == "stale"
+                   and c.get("expires_at") and c["expires_at"] < today]
+        if expired:
+            out["expired_capabilities"] = expired
     return out
 
 

@@ -38,10 +38,10 @@ class TestWorldRegistry(unittest.TestCase):
     """回归网：既有验收 + 负向突变（需已部署的世界层数据）。"""
 
     def test_01_build_check_consistent(self):
-        r1 = run(BUILD)
-        self.assertEqual(r1.returncode, 0, r1.stdout)
-        r2 = run(BUILD, "--check")
-        self.assertEqual(r2.returncode, 0, "generated 视图与重建不一致")
+        # SOL57 审查：不得先跑写入式 builder（会把待检测的 drift 覆盖掉再 --check，
+        # 测试自愈假绿）。只跑 --check；写入路径由人类/调用方显式触发。
+        r = run(BUILD, "--check")
+        self.assertEqual(r.returncode, 0, "generated 视图与重建不一致")
 
     def test_02_recall_probes(self):
         for term in ("Π_D", "N=1/2/3", "COMSOL"):

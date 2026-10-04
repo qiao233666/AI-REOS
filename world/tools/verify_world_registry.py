@@ -96,9 +96,14 @@ def check_files_vs_coverage(objs: list[dict]) -> None:
             rel = p.relative_to(REPO).as_posix()
             scoped_files.add(rel)
     orphans = scoped_files - declared_paths - exempt
+    # fail-closed 判定：coverage.status=full 时孤儿即违规（SOL57 审查 P0-1 修复：
+    # 此前硬编码 warn，"转正后 fail-closed"从未生效）
+    cov_status = (cov.get("coverage") or {}).get("status")
     for f in sorted(orphans):
-        # 迁移期：未分类文件=告警（转正后 fail-closed 由 coverage.status=full 触发）
-        warn(f"scope 内未登记文件（迁移期孤儿）: {f}")
+        if cov_status == "full":
+            fail(f"scope 内未登记文件（coverage=full，fail-closed）: {f}")
+        else:
+            warn(f"scope 内未登记文件（迁移期孤儿）: {f}")
     # 声明的源文件必须存在
     for o in objs:
         for s in o.get("sources", []):
