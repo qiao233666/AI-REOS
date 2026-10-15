@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 import yaml
 
@@ -47,13 +47,18 @@ REQUIRED_FILES: Tuple[str, ...] = (
     "FAILURES.md",
 )
 
-# (b) STATE.md 必需章节标题
+# (b) STATE.md 必需章节标题（各恰好一次；带说明后缀的竞争章节判失败）
 REQUIRED_STATE_HEADINGS: Tuple[str, ...] = (
     "## Current objective",
     "## Confirmed facts",
     "## Active hypotheses",
     "## Next 3 actions",
 )
+
+# (b2) STATE.md 体积硬门（2026-10-15 T-079：软性"1-3 页"声明升为程序化门禁；
+# 行数=解码后 splitlines() 总行数含空行；字符数防超长行折行过门）
+STATE_MAX_LINES = 150
+STATE_MAX_CHARS = 20000
 
 # (e) 在 STATE.md 中检索证据引用的正则
 EVIDENCE_REFERENCE_PATTERN = re.compile(r"E-[0-9]{3,}")
@@ -114,35 +119,6 @@ def _load_schema(root: Path, filename: str) -> Tuple[int, object]:
     return 0, payload
 
 
-def _extract_section(text: str, heading: str) -> str:
-    """
-    提取 Markdown 中某一二级标题到下一个二级标题之间的正文。
-
-    Parameters
-    ----------
-    text : str
-        完整的 Markdown 文本。
-    heading : str
-        目标二级标题，例如 "## Confirmed facts"。
-
-    Returns
-    -------
-    section : str
-        该章节正文；标题不存在时返回空字符串。
-    """
-    collected: List[str] = []
-    collecting = False
-    for line in text.splitlines():
-        if line.strip() == heading:
-            collecting = True
-            continue
-        if collecting and line.startswith("## "):
-            break
-        if collecting:
-            collected.append(line)
-    return "\n".join(collected)
-
-
 def check_required_files(root: Path) -> int:
     """检查必需治理文件是否齐全，缺任一项即视为失败。"""
     missing = [name for name in REQUIRED_FILES if not (root / name).is_file()]
@@ -154,20 +130,86 @@ def check_required_files(root: Path) -> int:
     return 0
 
 
+def _parse_h2_sections(text: str) -> List[Tuple[str, str]]:
+    """
+    统一的 Markdown 二级标题解析：返回 [(标题原文, 章节正文), ...]。
+
+    规则（2026-10-15 T-079 升级）：
+    - 只认"行首（允许前导空白）## "开头的真实二级标题行；
+    - 跳过 ``` 代码围栏内的伪标题；
+    - 标题行 = 从该行起（含可能的说明后缀）至下一个二级标题之前。
+    章节提取与标题查重共用本解析结果，避免两套逻辑漂移。
+    """
+    sections: List[Tuple[str, str]] = []
+    in_fence = False
+    current_heading: Optional[str] = None
+    current_lines: List[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            if current_heading is not None:
+                current_lines.append(line)
+            continue
+        if not in_fence and line.lstrip().startswith("## ") and not line.lstrip().startswith("###"):
+            if current_heading is not None:
+                sections.append((current_heading, "\n".join(current_lines)))
+            current_heading = line.lstrip()
+            current_lines = []
+        elif current_heading is not None:
+            current_lines.append(line)
+    if current_heading is not None:
+        sections.append((current_heading, "\n".join(current_lines)))
+    return sections
+
+
 def check_state_headings(root: Path) -> int:
-    """检查 STATE.md 是否包含全部必需章节标题。"""
+    """检查 STATE.md：体积硬门 + 四个必需章节标题各恰好一次 + 无后缀竞争章节。"""
     state_path = root / "STATE.md"
     if not state_path.is_file():
         _report("FAIL", f"STATE.md 不存在: {state_path}")
         return 1
     text = state_path.read_text(encoding="utf-8")
-    missing = [heading for heading in REQUIRED_STATE_HEADINGS if heading not in text]
-    if missing:
-        for heading in missing:
+
+    exit_code = 0
+    line_count = len(text.splitlines())
+    char_count = len(text)
+    if line_count > STATE_MAX_LINES:
+        _report("FAIL", f"STATE.md 行数 {line_count} 超过硬门 {STATE_MAX_LINES}（T-021 每周瘦身的程序化兜底）")
+        exit_code = 1
+    else:
+        _report("OK", f"STATE.md 行数 {line_count} ≤ {STATE_MAX_LINES}")
+    if char_count > STATE_MAX_CHARS:
+        _report("FAIL", f"STATE.md 字符数 {char_count} 超过硬门 {STATE_MAX_CHARS}（防超长行折行过门）")
+        exit_code = 1
+    else:
+        _report("OK", f"STATE.md 字符数 {char_count} ≤ {STATE_MAX_CHARS}")
+
+    sections = _parse_h2_sections(text)
+    exact_counts = {heading: 0 for heading in REQUIRED_STATE_HEADINGS}
+    for heading_line, _ in sections:
+        bare = heading_line.rstrip()
+        if bare in exact_counts:
+            exact_counts[bare] += 1
+            continue
+        matched_suffix = next(
+            (h for h in REQUIRED_STATE_HEADINGS
+             if bare.startswith(h) and bare[len(h):][:1] in ("（", " ", "(", "：", ":")),
+            None,
+        )
+        if matched_suffix is not None:
+            _report("FAIL", f"STATE.md 存在带后缀的竞争章节（标题重复分叉）: {heading_line.strip()!r}")
+            exit_code = 1
+    for heading, count in exact_counts.items():
+        if count == 0:
             _report("FAIL", f"STATE.md 缺少章节标题: {heading}")
-        return 1
-    _report("OK", "STATE.md 包含全部必需章节标题")
-    return 0
+            exit_code = 1
+        elif count > 1:
+            _report("FAIL", f"STATE.md 章节标题重复 {count} 次: {heading}")
+            exit_code = 1
+    if exit_code == 0:
+        _report("OK", "STATE.md 体积门与章节标题检查通过（四标题各恰好一次，无竞争分叉）")
+    return exit_code
 
 
 def check_evidence(root: Path) -> Tuple[int, Set[str]]:
@@ -222,14 +264,31 @@ def check_evidence(root: Path) -> Tuple[int, Set[str]]:
 
 
 def check_state_facts(root: Path, evidence_ids: Set[str]) -> int:
-    """核对 STATE.md 的 Confirmed facts 是否只引用已存在的证据 id。"""
+    """核对 STATE.md 的 Confirmed facts 是否只引用已存在的证据 id。
+
+    2026-10-15 T-079：改用与标题检查共享的章节解析，并覆盖**全部**规范及后缀
+    竞争章节（旧实现只取第一个精确匹配章节，后缀章节中的引用会漏检）。
+    """
     state_path = root / "STATE.md"
     if not state_path.is_file():
         _report("FAIL", f"STATE.md 不存在，无法核对证据引用: {state_path}")
         return 1
     text = state_path.read_text(encoding="utf-8")
-    section = _extract_section(text, "## Confirmed facts")
-    referenced = set(EVIDENCE_REFERENCE_PATTERN.findall(section))
+    sections = _parse_h2_sections(text)
+    referenced: Set[str] = set()
+    found_any = False
+    for heading_line, body in sections:
+        bare = heading_line.rstrip()
+        is_facts = bare == "## Confirmed facts" or (
+            bare.startswith("## Confirmed facts")
+            and bare[len("## Confirmed facts")][:1] in ("（", " ", "(", "：", ":")
+        )
+        if is_facts:
+            found_any = True
+            referenced |= set(EVIDENCE_REFERENCE_PATTERN.findall(body))
+    if not found_any:
+        _report("WARN", "STATE.md 未找到 Confirmed facts 章节（标题检查会另行报错）")
+        return 0
     if not referenced:
         _report("OK", "STATE.md Confirmed facts 未引用任何 E-xxx")
         return 0

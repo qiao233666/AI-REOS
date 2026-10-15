@@ -26,6 +26,8 @@ CONTEXT = """[AI-REOS 自动注入] 本仓库的跨工具治理真源是 aiops/�
 - 判断环境/工具/数据/历史方案"是否存在"或要实现/改写既有设计 → 先查 aiops/world/CURRENT.generated.md（世界层，含检索关键词）；
   未命中只能记 UNKNOWN，禁止推出"不存在"（F-015 教训）；再按需 grep aiops/ docs/design/ 与本地代码模板/注释——API 特征 ID 等契约细节常沉淀在模板注释（F-015 复发教训）
 - 新的约束性合同/方案书（spec/协议/决策稿）定稿或升版时 → **同次登记世界层对象**（draft+digest 锚定）；写在 scratch 下的约束合同尤其如此，别让它对世界层不可见（runner spec 遗漏事故，2026-10-04）。
+- 账本读法：EVIDENCE.yaml / TASK_QUEUE.yaml 等大账本禁止无任务需要地整文件加载进模型上下文——先 grep 定位编号/关键词，再按行段读取（EVIDENCE.yaml 已超 29 万字符）；校验脚本的完整解析与定向检索不受此限。
+- 对话纪律（CHARTER §8）：回复用户用清晰自足的自然语言，结论先行、编号只作定位注记；账本体只用于账本文件。
 收尾前：提交由 pre-commit 门禁自动跑 aiops/checks/run_all_checks.py（校验项清单以该文件 CHECKS 为准）。
 禁止未经批准删除/覆盖 results/、outputs/、data/、archive/、runs/、model_parameters/ 等结果目录
 （ZCode 侧由 PreToolUse 守卫 hook 程序化拦截；守卫脚本：aiops/checks/hooks/guard_destructive.py）。"""

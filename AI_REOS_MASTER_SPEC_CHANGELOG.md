@@ -187,3 +187,63 @@
   背景：实测发现某 AI 把 GPU 吞吐教训写进工具私有记忆，治理真源未收到（首例写失效）。
 - **schema 扩展（2026-10-04，T-053）**：world-object.schema.json 增 kind=record
   （记录类：交接/留痕/简报/对话，参考非约束），源头项目 docs/notes 33 篇已全量登记。
+
+## v1.4.0（2026-10-15）——对话纪律、STATE 硬门与账本事务追加器（源头项目 T-084/D-040）
+
+用户投诉 AI 回复全是难读的"账本体"（浓缩编号串联）触发；方案经 gpt-5.6-sol 三轮
+评审终审 GO 后在源头项目实施，本轮回流 kit。
+
+### 1. 对话纪律（新章）
+
+- CHARTER 模板新增"对话纪律（回复用户）"章（kit 布局 §8；源头仓 §10）：账本体只属
+  账本文件，回复用户结论先行、编号只作定位注记（核查/调试/交接例外）、未知原因
+  不编造、改变呈现形式不减少交付信息；
+- bootstrap 的 AGENTS_BLOCK 与 SessionStart 注入各增一行对话纪律指针（kit 内引用
+  §8，与 kit CHARTER 章节布局一致——源头仓为 §10，跨仓引用不得照搬章节号）。
+
+### 2. 账本读法（上下文饮食）
+
+- AGENTS_BLOCK 与 SessionStart 注入各增"账本读法"行：EVIDENCE.yaml/TASK_QUEUE.yaml
+  等大账本禁止无任务需要地整文件加载进模型上下文（源头仓实测已超 29 万字符），
+  先 grep 定位再按行段读取；校验脚本完整解析不受此限。
+
+### 3. STATE.md 体积硬门（verify_ai_state 升级）
+
+- 行数 ≤150（splitlines 含空行）与字符数 ≤20000 双硬门，超限 FAIL（软性"1-3 页"
+  声明升为程序化门禁；源头仓 STATE 曾膨胀至 481 行）；
+- 章节标题检查升级：统一 Markdown 二级标题解析（代码围栏免疫、正文提及不误判），
+  四个必需标题各**恰好一次**，带说明后缀的竞争章节（历史分叉形态）判 FAIL；
+- Confirmed facts 引用检查改用共享解析结果并覆盖全部同名/后缀章节（旧实现只取
+  第一个精确匹配章节，后缀章节中的引用漏检——sol 第二轮评审抓出的缺口）；
+- 新增 tests/test_verify_ai_state_gate.py：9 项正负向（150/151 行边界、缺标题、
+  重复标题、后缀竞争、围栏/正文提及、坏引用、超字符）。
+
+### 4. 账本事务追加器 ledger_write.py（撞号结构修复，T-060 阶段 1）
+
+- 新增 `checks/ledger_write.py`：append 走 OS 句柄锁（Windows msvcrt/POSIX flock，
+  进程退出自动释放）→ 锁内从账本实际条目取号 → 完整候选文件内存校验 → 同目录
+  临时文件 fsync 后 os.replace 原子替换（替换失败原文件不动）；
+- request-id 幂等：写成功但返回前崩溃的场景重试返回原编号；同请求号不同内容拒绝；
+  request 元数据以受控注释行持久化（safe_load 不可见，专项可读回）；
+- update 入口带版本哈希比较（拒绝基于旧整本的覆盖更新）；已发布编号永不回收；
+- 边界声明：单工作树（canonical writer=主仓主工作树）内防撞；跨 worktree 只提交
+  草稿不自行定号——本工具不声称解决跨工作树并发（诚实边界，sol 评审必改7）；
+- `protocols/evidence-protocol.md` 增"写入入口"节：新条目必须走追加器，不得手工
+  编辑账本取号；撞号按内容锚点+前向重编号+ID_ALIAS 处理，语义冲突另行核查；
+- 新增 tests/test_ledger_write.py（6 项：分配/幂等重放与冲突/元数据往返/崩溃保护/
+  6 进程并发/陈旧更新拒绝）与 tests/stress_ledger_write.py（12 进程压力盲测）；
+  依赖仅标准库+PyYAML，Windows/Linux 均可运行；
+- 背景：源头仓历史撞号七次在册（grep 取号与写入间隙被并行会话插入）；修复期另
+  挖出历史账本结构损伤（E-150/E-151/E-152 连环，FAILURES F-025）——旧"手工编辑+
+  子串检查"流程的温床，追加器为结构性修复。
+
+### 5. 升级与兼容
+
+- 新装：`bootstrap.py` 三模板更新（CHARTER §8/AGENTS_BLOCK 两行/STATE 模板不变）；
+- 升级（1.3.2→1.4.0）：checks/ 与 tests/ 走 manifest ADD/UPDATE（新增 ledger_write.py、
+  test_ledger_write.py、test_verify_ai_state_gate.py、stress_ledger_write.py；
+  更新 verify_ai_state.py、session_start_context.py、evidence-protocol.md），
+  账本与世界层骨架不动；已安装仓的 CHARTER/STATE 属用户账本，kit 模板升级不自动
+  迁移（按 README 升级说明人工对照回流）；
+- run_all_checks 的 CHECKS 清单不变（ledger_write 是写入工具不是门禁检查项；
+  引用完整性仍由 verify_ai_state/check_id_uniqueness 承担）。

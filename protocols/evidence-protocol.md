@@ -19,6 +19,26 @@
 - 向 `aiops/EVIDENCE.yaml` 追加一条记录（第一版为**单文件**布局，字段符合 `aiops/schemas/evidence.schema.json`）。
 - 在 Decision 中以 `why_evidence_ids` 引用。
 
+### 写入入口（2026-10-15，T-084/D-040）
+
+新增条目**必须走统一事务追加器** `aiops/checks/ledger_write.py append`
+（OS 句柄锁 + 锁内取号 + 原子 os.replace + request-id 幂等），不得手工编辑账本取号：
+
+```sh
+python aiops/checks/ledger_write.py append --kind E --entry <草稿.yaml> --root aiops
+python aiops/checks/ledger_write.py show --kind E --request-id <uuid> --root aiops  # 崩溃后查回编号
+```
+
+- 草稿**不携带 id**；编号由追加器在锁内从账本实际条目计算，返回后不得更改。
+- 相同 request-id 重试返回原编号（幂等）；同请求号不同内容拒绝。
+- 已发布编号永不回收；撞号按内容锚点+前向重编号+`ID_ALIAS.md` 处理，
+  **不同编号之间的语义重复或结论冲突须另行核查，不能靠改号解决**。
+- request-id 与 payload hash 以受控注释行持久化；追加/修改不得丢失既有请求记录。
+- 边界声明：追加器为单工作树（canonical writer=主仓主工作树）内防撞；
+  跨 worktree 只提交草稿，不在本地副本自行定号。
+- 程序化校验：`check_id_uniqueness` 仅查编号重复，不验证归属、不识别语义重复——
+  它是兜底不是主防线。
+
 > 迁移触发条件（满足任一再拆分）：文件大到每次检索/编辑明显变慢；多 worktree/多人出现反复合并冲突；
 > 需要独立权限或自动生成索引。迁移到 `aiops/evidence/E-xxx.yaml` 时必须保留稳定 ID，并由脚本生成汇总索引，
 > 不得让 Agent 手工维护两套真源。

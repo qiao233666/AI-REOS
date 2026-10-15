@@ -24,7 +24,7 @@
 ## 二、目录里有什么
 
 ```text
-AI_REOS_kit_v1.3.2/
+AI_REOS_kit_v1.4.0/
 ├── bootstrap.py                  ← 安装器（唯一需要执行的文件）
 ├── README.md                     ← 本文件（快速上手）
 ├── TUTORIAL.md                   ← 原理教程（四层架构/每层为什么/排障索引）
@@ -54,9 +54,9 @@ AI_REOS_kit_v1.3.2/
 
 ```bash
 cd /path/to/your-repo
-python /path/to/AI_REOS_kit_v1.3.2/bootstrap.py --dry-run   # 先预览装什么
-python /path/to/AI_REOS_kit_v1.3.2/bootstrap.py             # 实际安装
-pip install -r /path/to/AI_REOS_kit_v1.3.2/requirements.txt # 可选依赖（建议）
+python /path/to/AI_REOS_kit_v1.4.0/bootstrap.py --dry-run   # 先预览装什么
+python /path/to/AI_REOS_kit_v1.4.0/bootstrap.py             # 实际安装
+pip install -r /path/to/AI_REOS_kit_v1.4.0/requirements.txt # 可选依赖（建议）
 ```
 
 bootstrap 会：
