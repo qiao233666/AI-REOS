@@ -247,3 +247,18 @@
   迁移（按 README 升级说明人工对照回流）；
 - run_all_checks 的 CHECKS 清单不变（ledger_write 是写入工具不是门禁检查项；
   引用完整性仍由 verify_ai_state/check_id_uniqueness 承担）。
+
+### 6. v3 修订（2026-10-16，源主仓同日）
+
+用户反馈"汇报仍难读"（会话内黑话+读者在场假设两大病灶），对照公开的 Claude Code
+官方沟通规范（system-prompt-communication-style / outcome-first / concise-output-style，
+v2.1.x）逐条吸收修订对话纪律章（kit §8/主仓 §10）：
+
+- 核心姿态：写给"中途离场、回来接盘的同事"，假定读者没跟过程；
+- 新增条款：行话/任务号（T-xxx）首现必须一句话解释或换平实说法，不得让读者反查
+  早前编号；可读优先于简洁（短靠选择性取舍，不靠碎片/缩写串/箭头链）；
+- 结构匹配：简单问题平实散文直答，表格只放可枚举短事实；
+- 保留：结论先行、交付信息不减少、错误报告完整、编号仅定位注记（核查场景例外）。
+
+同步面：主仓 CHARTER v3 + SessionStart 注入行 + AGENTS.md；kit bootstrap 两模板；
+三部署项目注入行同日跟升。
