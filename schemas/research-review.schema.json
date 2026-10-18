@@ -1,0 +1,401 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Research Route Review v2",
+  "description": "科研路线判断：把一个失败事件拆成论断/方法/路线三类独立判断，比较四种处置 + 维持原样，给出可执行动作、授权与改判条件。不与证据真伪、任务状态、资源授权混淆。文本质量必须另行领域审查。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "review_id",
+    "line",
+    "supersedes",
+    "trigger",
+    "question",
+    "judgments",
+    "opportunities",
+    "options",
+    "recommendation",
+    "selected_actions",
+    "lifecycle",
+    "approval",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": 2},
+
+    "review_id": {
+      "type": "string",
+      "pattern": "^RD-[A-Za-z0-9_-]+$",
+      "description": "复盘 id。同一研究线的多个版本各自独立编号。"
+    },
+
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line_id", "line_revision", "question", "scope", "answer_criterion", "owner", "task_refs", "derived_from"],
+      "description": "研究线身份。研究线与执行任务是多对多：一条线可含多个任务，一个任务可服务多条线。禁止把 line_id 等同于任务号。",
+      "properties": {
+        "line_id": {
+          "type": "string",
+          "pattern": "^RL-[0-9]{3,}$",
+          "description": "研究线 id，格式 RL-<至少3位数字>。实质更换研究问题必须新建线，并用 derived_from 指回。"
+        },
+        "line_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "问题合同版本。scope 或 answer_criterion 改变必须升版，旧版保留。"
+        },
+        "question": {
+          "type": "string",
+          "minLength": 12,
+          "description": "该线要回答的科学问题原文。"
+        },
+        "scope": {
+          "type": "string",
+          "minLength": 12,
+          "description": "适用边界：模型、端口、端接、参数区间。禁止跨模型继承结论。"
+        },
+        "answer_criterion": {
+          "type": "string",
+          "minLength": 12,
+          "description": "什么算回答了这个问题的可判定标准。"
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 2,
+          "description": "可解析的责任角色。不得留空或写“后续研究”。"
+        },
+        "task_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^T-[0-9]+$"},
+          "description": "该线涉及的执行任务。允许为空（线尚未立项执行）。"
+        },
+        "derived_from": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["line_id", "line_revision", "decision_ref"],
+          "description": "换问题建新线时指向来源线。原线不删除。",
+          "properties": {
+            "line_id": {"type": "string", "pattern": "^RL-[0-9]{3,}$"},
+            "line_revision": {"type": "integer", "minimum": 1},
+            "decision_ref": {"type": "string", "pattern": "^D-[0-9]+$"}
+          }
+        }
+      }
+    },
+
+    "supersedes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^RD-[A-Za-z0-9_-]+$"},
+      "description": "本复盘替代的同线旧复盘 id。与 derived_from 语义不同：supersedes 是同线改版，derived_from 是换线。"
+    },
+
+    "trigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "evidence_refs", "summary"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "decisive_negative",
+            "method_stagnation",
+            "scope_only_closure",
+            "line_closure",
+            "resource_request",
+            "writing_finalization",
+            "other"
+          ],
+          "description": "decisive_negative=核心主张证据撤回；method_stagnation=两次有界修补无判别力增量；scope_only_closure=拟仅靠收窄/免责声明结案；line_closure=拟关线；resource_request=拟申请超范围投入；writing_finalization=写作收尾且仍有影响核心解释的未决问题。"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^E-[0-9]+$"}
+        },
+        "summary": {"$ref": "#/definitions/explanation"}
+      }
+    },
+
+    "question": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["original", "scientific_value"],
+      "properties": {
+        "original": {"$ref": "#/definitions/explanation"},
+        "scientific_value": {"$ref": "#/definitions/explanation"}
+      }
+    },
+
+    "judgments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["claim", "method", "line"],
+      "description": "三类判断必须分开记录。论断不成立不得直接推出方法失效，方法失效不得直接推出路线无价值。",
+      "properties": {
+        "claim": {
+          "type": "array",
+          "minItems": 1,
+          "description": "逐条主张判断。允许同一次复盘中分别撤回、收窄、保留不同主张。",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["target_ref", "verdict", "evidence_refs", "reason"],
+            "properties": {
+              "target_ref": {
+                "type": "string",
+                "minLength": 3,
+                "description": "主张对象及版本，如 C2@v1 或 manuscript§3@draft2。"
+              },
+              "verdict": {
+                "enum": ["supported", "unsupported", "refuted", "narrowed", "unknown"],
+                "description": "unsupported=支持不足；refuted=已被反证；narrowed=仅缩小范围后成立；unknown=证据不足无法判定。"
+              },
+              "evidence_refs": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {"type": "string", "pattern": "^E-[0-9]+$"}
+              },
+              "reason": {"$ref": "#/definitions/explanation"}
+            }
+          }
+        },
+        "method": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["target_ref", "verdict", "revisable_premises", "reason"],
+          "properties": {
+            "target_ref": {
+              "type": "string",
+              "minLength": 3,
+              "description": "方法对象及版本，如 model_A@v1 / FE-kernel@v3。"
+            },
+            "verdict": {
+              "enum": ["applicable", "conditional", "unsuitable", "unknown"],
+              "description": "conditional=仅在所列前提成立时可用；unsuitable=无法回答目标问题。"
+            },
+            "revisable_premises": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 4},
+              "description": "可修改的前提清单。空数组合法。"
+            },
+            "reason": {"$ref": "#/definitions/explanation"}
+          }
+        },
+        "line": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value_verdict",
+            "remaining_question",
+            "anomaly_assessment",
+            "knowledge_gain",
+            "coverage_refs",
+            "opportunity_cost",
+            "reason"
+          ],
+          "description": "路线判断。暂停/退役必须给出独立的投入取舍理由——不要求把理由归因于论断失败；因成本、优先级或已被覆盖而停止同样合法。",
+          "properties": {
+            "value_verdict": {
+              "enum": ["continue_bounded", "pause", "retire", "unknown"],
+              "description": "continue_bounded=有限预算内继续；pause=暂停；retire=停止投入（不代表问题已解答）；unknown=尚不能判断。"
+            },
+            "remaining_question": {
+              "type": "string",
+              "minLength": 8,
+              "description": "剩余未解问题；若认为无剩余问题须明写并给依据。"
+            },
+            "anomaly_assessment": {
+              "type": "string",
+              "minLength": 8,
+              "description": "值得解释的异常，或明确写“未发现值得保留的异常”及依据。"
+            },
+            "knowledge_gain": {
+              "type": "string",
+              "minLength": 8,
+              "description": "回答后比现有知识多知道什么。"
+            },
+            "coverage_refs": {
+              "type": "array",
+              "items": {"type": "string", "minLength": 4},
+              "description": "已被谁覆盖的检索/文献依据。查新未完成时留空并在 reason 中说明，不得宣称“已被充分覆盖”。空数组合法。"
+            },
+            "opportunity_cost": {
+              "type": "string",
+              "minLength": 8,
+              "description": "最低可信验证成本及这些投入的替代用途。"
+            },
+            "reason": {"$ref": "#/definitions/explanation"}
+          }
+        }
+      }
+    },
+
+    "opportunities": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["assessment", "reason", "questions"],
+      "properties": {
+        "assessment": {"enum": ["open", "uncertain", "no_viable_opportunity"]},
+        "reason": {"$ref": "#/definitions/explanation"},
+        "questions": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/explanation"},
+          "description": "值得检验的新问题候选。空数组合法；声明 no_viable_opportunity 时必须为空。"
+        }
+      }
+    },
+
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["narrow_write", "repair_method", "pivot_question", "stop_pause", "continue_existing"],
+      "description": "五种待比较处置。不要求每项都有实验；但每项必须表态并给理由。“维持原问题原方法”必须是合法选项，不能为获得预算被迫声称修改方法。",
+      "properties": {
+        "narrow_write": {"$ref": "#/definitions/option"},
+        "repair_method": {"$ref": "#/definitions/option"},
+        "pivot_question": {"$ref": "#/definitions/option"},
+        "stop_pause": {"$ref": "#/definitions/option"},
+        "continue_existing": {"$ref": "#/definitions/option"}
+      }
+    },
+
+    "recommendation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary",
+        "why_over_alternatives",
+        "next_action",
+        "expected_knowledge_gain",
+        "change_my_mind_if",
+        "resource_ceiling",
+        "revisit_condition",
+        "manuscript_action"
+      ],
+      "properties": {
+        "primary": {
+          "enum": ["narrow_write", "repair_method", "pivot_question", "stop_pause", "continue_existing"],
+          "description": "主推荐。必须在 selected_actions 中有对应 execute 动作，且该 option 的 ruling 为 recommend。"
+        },
+        "why_over_alternatives": {"$ref": "#/definitions/explanation"},
+        "next_action": {"$ref": "#/definitions/explanation"},
+        "expected_knowledge_gain": {"$ref": "#/definitions/explanation"},
+        "change_my_mind_if": {
+          "$ref": "#/definitions/explanation",
+          "description": "可观察的改判条件。不得写“有新证据时”这类空条件。退役时允许明确“无计划主动重开”。"
+        },
+        "resource_ceiling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cpu_hours", "human_minutes"],
+          "description": "本次全部并行动作的预算上限。null 表示未核定，不等同无限；额外预算申报时两维不得同时为 null。",
+          "properties": {
+            "cpu_hours": {"type": ["number", "null"], "minimum": 0},
+            "human_minutes": {"type": ["number", "null"], "minimum": 0}
+          }
+        },
+        "revisit_condition": {"$ref": "#/definitions/explanation"},
+        "manuscript_action": {
+          "enum": ["hold", "narrow", "write_existing_supported_claims", "withdraw_invalid_claims"],
+          "description": "对稿件的作用。withdraw_invalid_claims 应在 approval 为 rejected 时同样允许（撤下错误主张是纠错不是执行）。"
+        }
+      }
+    },
+
+    "selected_actions": {
+      "type": "array",
+      "minItems": 1,
+      "description": "实际要执行/保留的动作。与 options 的区别：options 是备选评价，selected_actions 是确定对象、任务与权限。同一对象不得同时退役与继续投入；不同对象可并存。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["action_id", "kind", "target_ref", "task_ref", "mode"],
+        "properties": {
+          "action_id": {"type": "string", "pattern": "^A[0-9]+$"},
+          "kind": {
+            "enum": ["narrow_write", "repair_method", "pivot_question", "stop_pause", "continue_existing"]
+          },
+          "target_ref": {"type": "string", "minLength": 3},
+          "task_ref": {
+            "type": ["string", "null"],
+            "pattern": "^T-[0-9]+$",
+            "description": "执行任务。candidate_only 时允许为 null。"
+          },
+          "mode": {
+            "enum": ["execute", "candidate_only"],
+            "description": "candidate_only 只保留候选，不产生计算或写作许可。"
+          }
+        }
+      }
+    },
+
+    "lifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "description": "建议的路线状态转换。这是建议值，不是当前有效状态；有效状态须沿 approval 链推导。",
+      "properties": {
+        "from": {"enum": ["unassessed", "active", "paused", "retired", "completed"]},
+        "to": {"enum": ["unassessed", "active", "paused", "retired", "completed"]}
+      }
+    },
+
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "approval_ref", "approved_at", "input_digest"],
+      "description": "审批是两个维度之一。approved 不等于 actions 可执行；执行入口须另行核对授权范围、快照与消费记录。",
+      "properties": {
+        "status": {"enum": ["proposed", "approved", "rejected"]},
+        "approval_ref": {
+          "type": ["string", "null"],
+          "pattern": "^D-[0-9]+$",
+          "description": "指回真实存在的 D 条目。检查器必须核对 D 编号存在；仅格式合法不算授权。"
+        },
+        "approved_at": {"type": ["string", "null"], "format": "date"},
+        "input_digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "description": "冻结输入摘要（引用对象版本 + 内容摘要）。工作区存在未提交修改时 source_commit 不足以证明输入内容。"
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["author", "created_at", "source_commit"],
+      "properties": {
+        "author": {"type": "string", "minLength": 2},
+        "created_at": {"type": "string", "format": "date"},
+        "source_commit": {"type": ["string", "null"], "minLength": 7}
+      }
+    }
+  },
+
+  "definitions": {
+    "explanation": {"type": "string", "minLength": 12},
+    "option": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ruling", "reason", "evidence_refs"],
+      "properties": {
+        "ruling": {"enum": ["recommend", "do_not_recommend", "undetermined"]},
+        "reason": {"$ref": "#/definitions/explanation"},
+        "evidence_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^E-[0-9]+$"}
+        },
+        "discriminator": {
+          "type": ["string", "null"],
+          "minLength": 12,
+          "description": "最小有区分力的观测/判别过程。选择 repair_method 或 pivot_question 时必填。"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,158 @@
+# kit 自带测试样例：结构完备的科研路线判断记录（纯合成，无任何真实项目内容）。
+# 用途：供 tests/ 下的门禁与守卫测试使用；也作为新项目的填写参考骨架。
+# 说明：approval.status=proposed 表示"建议"，不产生任何执行许可。
+
+schema_version: 2
+review_id: RD-FIXTURE-001
+line:
+  line_id: RL-900
+  line_revision: 1
+  question: >-
+    示例研究问题：在给定模型与边界条件下，某类候选实现能否被排除？
+  scope: >-
+    示例适用范围：模型 M、边界条件 B、参数区间 P；
+    结论不跨模型或端接条件继承。
+  answer_criterion: >-
+    给出该类实现的可判定结论（可实现 / 被排除），
+    并写明该结论成立的口径与适用范围。
+  owner: root-agent
+  task_refs: [T-001]
+  derived_from: null
+supersedes: []
+trigger:
+  kind: decisive_negative
+  evidence_refs: [E-001]
+  summary: >-
+    E-001 显示原验证式由定义代入必然成立，对目标性质不敏感，
+    不能作为独立证据。
+question:
+  original: >-
+    示例问题原文：如何为目标量建立可独立检验的观测口径？
+  scientific_value: >-
+    示例价值陈述：区分约定性等式与独立物理约束，
+    决定哪些结论可以迁移到其他适用边界。
+judgments:
+  claim:
+    - target_ref: CLAIM-A@v1
+      verdict: unsupported
+      evidence_refs: [E-001]
+      reason: >-
+        支撑该主张的验证由定义代入必然成立，对目标性质不敏感，
+        不能继续作为证据。
+    - target_ref: CLAIM-B@v1
+      verdict: narrowed
+      evidence_refs: [E-001]
+      reason: >-
+        该结论在给定边界与示例实现类内成立，但适用范围必须写明，
+        不得外推到其他模型或端接条件。
+  method:
+    target_ref: METHOD-A@v1
+    verdict: unsuitable
+    revisable_premises:
+      - 改用独立推导路径重建观测口径
+      - 改用直接积分形式做独立对账
+      - 在已知解析极限上做锚点检验
+    reason: >-
+      该方法由定义代入必然闭合，无法区分正确与错误口径；
+      继续提高计算精度不会增加判别力。
+  line:
+    value_verdict: continue_bounded
+    remaining_question: >-
+      目标量的严格定义与独立计算式尚未导出，仍未被独立验证。
+    anomaly_assessment: >-
+      未发现值得保留的新异常；原"闭合"是恒等式代入，
+      不构成需要另立问题解释的反常现象。
+    knowledge_gain: >-
+      若独立口径成立，可判断结论在哪一步欠定，
+      这是后续可主张内容的直接前提。
+    coverage_refs: []
+    opportunity_cost: >-
+      纸面推导约 90 分钟人工；无需新增计算资源。
+    reason: >-
+      障碍是验证方法不可识别，而非科学问题自动失效；
+      仍存在不依赖旧恒等式的独立推导路径。
+opportunities:
+  assessment: open
+  reason: >-
+    可从独立守恒式与直接积分形式建立交叉检验，
+    并用已知解析极限作为独立对照。
+  questions: []
+options:
+  narrow_write:
+    ruling: do_not_recommend
+    reason: >-
+      缩小主张可以继续，但仅增加免责声明不能填补独立口径缺口；
+      把话说小不等于工作完成。
+    evidence_refs: [E-001]
+    discriminator: null
+  repair_method:
+    ruling: recommend
+    reason: >-
+      保留原科学问题，改用独立推导与直接积分做验证；
+      这是更换验证逻辑，而非放宽结论。
+    evidence_refs: [E-001]
+    discriminator: >-
+      先在已知解析极限与一个受控锚点上比较独立预算各项及残差；
+      结果不得通过重新定义目标量或复用原恒等式强行闭合。
+  pivot_question:
+    ruling: undetermined
+    reason: >-
+      观测到的差异提示另一可研究问题，但它不能替代当前验证，
+      且尚缺跨参数分析。
+    evidence_refs: [E-001]
+    discriminator: >-
+      如获续投许可，可固定外缘与功率定义，
+      先在纸面上检查参数规律，再决定是否投入计算。
+  stop_pause:
+    ruling: do_not_recommend
+    reason: >-
+      核心问题尚有明确的独立推导路径与验证价值；
+      目前没有依据把"验证方法失效"升级为"整条线无价值"。
+    evidence_refs: [E-001]
+    discriminator: null
+  continue_existing:
+    ruling: do_not_recommend
+    reason: >-
+      原方法已被证明不可识别，维持原样无法回答目标问题；
+      若独立核查发现原方法另有独立证据来源，可重新评估。
+    evidence_refs: [E-001]
+    discriminator: null
+recommendation:
+  primary: repair_method
+  why_over_alternatives: >-
+    与只写免责声明相比，独立推导能直接回答尚未解决的问题；
+    与转向其他问题相比，它更直接支撑当前论证，且无需大规模计算。
+  next_action: >-
+    先完成独立口径的纸面推导，逐项列出边界项、归一与目标量定义；
+    再写不调用原恒等式的脚本，在最小算例上逐项核对。
+  expected_knowledge_gain: >-
+    判断能否以独立的物理/数学收支支撑目标解释，
+    或定位现有定义在哪一步欠定。
+  change_my_mind_if: >-
+    若独立推导显示目标量与观测根本不闭合，或关键观测缺乏唯一识别性，
+    则重新评估建模假设与研究价值，并考虑暂停该线投入。
+  resource_ceiling:
+    cpu_hours: 0.0
+    human_minutes: 90.0
+  revisit_condition: >-
+    若首轮纸面推导不能在限定时间内给出可检验的结构，
+    则暂停新增计算，先明确缺失假设并重新裁决。
+  manuscript_action: hold
+selected_actions:
+  - action_id: A1
+    kind: repair_method
+    target_ref: OBSERVABLE@v2
+    task_ref: T-001
+    mode: execute
+lifecycle:
+  from: active
+  to: active
+approval:
+  status: proposed
+  approval_ref: null
+  approved_at: null
+  input_digest: null
+provenance:
+  author: kit_fixture
+  created_at: '2026-10-19'
+  source_commit: null

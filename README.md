@@ -24,7 +24,7 @@
 ## 二、目录里有什么
 
 ```text
-AI_REOS_kit_v1.4.0/
+AI_REOS_kit_v1.5.0/
 ├── bootstrap.py                  ← 安装器（唯一需要执行的文件）
 ├── README.md                     ← 本文件（快速上手）
 ├── TUTORIAL.md                   ← 原理教程（四层架构/每层为什么/排障索引）
@@ -39,6 +39,7 @@ AI_REOS_kit_v1.4.0/
 ├── templates/                    ← 决策/证据/交接等模板
 ├── checks/                       ← 校验脚本 + git 门禁 + 守卫 hook（强制层）
 ├── tests/                        ← 治理代码回归测试（含世界层 builder/verifier 测试）
+├── research_reviews/              ← 科研路线判断记录（可选组件，放 RD-*.yaml 即启用）
 ├── world/tools/                  ← 世界观层工具（构建器/校验器/账本分层视图，v1.3.2）
 ├── specs_template/               ← 任务合同模板
 ├── templates_ledger/             ← 实验登记模板
@@ -54,9 +55,9 @@ AI_REOS_kit_v1.4.0/
 
 ```bash
 cd /path/to/your-repo
-python /path/to/AI_REOS_kit_v1.4.0/bootstrap.py --dry-run   # 先预览装什么
-python /path/to/AI_REOS_kit_v1.4.0/bootstrap.py             # 实际安装
-pip install -r /path/to/AI_REOS_kit_v1.4.0/requirements.txt # 可选依赖（建议）
+python /path/to/AI_REOS_kit_v1.5.0/bootstrap.py --dry-run   # 先预览装什么
+python /path/to/AI_REOS_kit_v1.5.0/bootstrap.py             # 实际安装
+pip install -r /path/to/AI_REOS_kit_v1.5.0/requirements.txt # 可选依赖（建议）
 ```
 
 bootstrap 会：

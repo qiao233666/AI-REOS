@@ -262,3 +262,60 @@ v2.1.x）逐条吸收修订对话纪律章（kit §8/主仓 §10）：
 
 同步面：主仓 CHARTER v3 + SessionStart 注入行 + AGENTS.md；kit bootstrap 两模板；
 三部署项目注入行同日跟升。
+
+---
+
+## v1.5.0（2026-10-19）——科研路线判断机制通用化回流（源：下游声涡耦合项目的实战机制）
+
+### 1. 背景
+
+下游项目在实战中提出并验证了一套"科研路线判断"机制：把失败事件的三种判断
+（论断不成立 / 方法走不通 / 路线不值得投入）分开记录，避免系统唯一出口退化为
+"缩小论断 + 加免责声明"。机制经四轮外部模型评审、三份真实复盘记录压测后定稿。
+本次将其抽象为 kit 通用组件。
+
+### 2. 新增托管文件
+
+- `schemas/research-review.schema.json`（v2）：三类判断分离、五种处置
+  （含 `continue_existing`，防止为拿预算被迫声称改了方法）、
+  `selected_actions` 区分 `execute` 与 `candidate_only`、
+  `lifecycle` 与 `approval` 双维度、`input_digest` 冻结输入；
+- `protocols/research-review.md`：规则真源，明确**机器能查结构与引用、
+  不能查理由充分性与科学价值**；含已接受的四种失败模式及拦截手段；
+- `checks/verify_research_reviews.py`：结构门（D 编号存在性、approval 三字段
+  一致、动作冲突、candidate_only 不得绑任务、retire 需 execute 的 stop 动作等）；
+- `checks/verify_research_reviews_observe.py`：观察性包装（`REPORT_ONLY=True`），
+  区分"报告结果"与"阻断提交"；无复盘文件时报 SKIP 而非 PASS，不制造假安全感；
+- `checks/research_action_guard.py`：执行前守卫（拒绝无副作用、幂等防重复消费、
+  超额拒绝、纠错豁免、superseded 决策拒绝）；
+- `tests/`：schema 20 项 + 门禁 46 项 + 守卫 10 项，共 76 项（kit 合计 100 项）；
+- `tests/fixtures/RD-FIXTURE-001.yaml`：**纯合成**的结构完备样例，
+  不含任何下游项目科学内容，同时可作为新项目的填写骨架。
+
+### 3. 通用化处理（与下游项目版的差异）
+
+- 清除所有项目专属引用（任务号/证据号/研究线号/领域术语）；示例统一为 `RL-xxx`；
+- 测试改为依赖 kit 自带 fixture，不再引用项目真实复盘记录；
+- `run_all_checks.py` 改为**按需启用**：仅当仓库存在 `aiops/research_reviews/RD-*.y*ml`
+  时才挂载该项检查。未启用该机制的项目完全零噪音（不出现 SKIP 行），
+  避免"装了却永远跳过"的视觉负担。
+
+### 4. 升级决策逻辑修复（影响所有项目）
+
+原 bootstrap 在 CONFLICT 分支把 **kit 哈希**写入 manifest，而磁盘上仍是本地内容。
+后果：同一文件每次升级都必然重复报 CONFLICT，**永不收敛**，且无法区分
+"用户还没合并"与"用户已合并但 kit 又变了"。
+
+v1.5.0 改为记录**本地实际哈希**：本地未改动时仍报 CONFLICT（如实提示未合并），
+一旦用户把本地内容改成与 kit 一致，下次升级自动转 KEEP。收敛语义恢复正确。
+
+> 注意：本修复只解决"冲突记录永不收敛"，不自动合并任何本地修改。
+> 已有部署项目升级后 manifest 漂移会归零，但未合并的文件仍会如实报 CONFLICT。
+
+### 5. 升级与兼容
+
+- 新装：全部文件 ADD；机制默认未启用（无 `research_reviews` 目录即不检查）；
+- 1.4.0 → 1.5.0：research 相关 6 文件 ADD、其余 KEEP；下游实战项目因已有本地
+  版本会报 CONFLICT，采纳 kit 版即可获得条件挂载与通用化措辞；
+- 启用方式：创建 `aiops/research_reviews/` 并放入 `RD-*.yaml` 记录，
+  检查项自动挂载；观察期 `REPORT_ONLY=True`，验收通过后由人改为强制。

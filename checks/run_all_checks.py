@@ -33,12 +33,29 @@ import check_adapter_drift
 import verify_ai_state
 import verify_claims
 import verify_experiment_metadata
+import verify_research_reviews_observe
 import verify_task_specs
 import verify_world_registry_entry
 
 # 模块级配置：检查项清单集中定义，新增检查在此登记即可
 REPO_ROOT = Path(__file__).resolve().parents[2]
 AIOPS_ROOT = REPO_ROOT / "aiops"
+
+# v1.5.0：科研路线判断机制是**按需启用**的可选组件。
+# 只有项目实际启用了它（存在复盘目录或任一复盘文件）才挂载检查项；
+# 未启用的项目不产生任何额外输出，避免"装了却永远 SKIP"的噪音。
+RESEARCH_REVIEWS_DIRNAME = "research_reviews"
+
+
+def _research_reviews_enabled(root: Path) -> bool:
+    """判断本仓是否启用了科研路线判断机制。"""
+    base = Path(root)
+    repo = base.parent if base.name == "aiops" else base
+    folder = repo / "aiops" / RESEARCH_REVIEWS_DIRNAME
+    if not folder.is_dir():
+        return False
+    return any(folder.glob("RD-*.y*ml"))
+
 
 CHECKS: Tuple[Tuple[str, Callable[[Path], int]], ...] = (
     ("verify_ai_state", verify_ai_state.main),
@@ -68,7 +85,12 @@ def main(root: Path) -> int:
     print(f"== run_all_checks: {root} ==")
 
     results: List[Tuple[str, int, float]] = []
-    for name, runner in CHECKS:
+    active_checks = list(CHECKS)
+    if _research_reviews_enabled(root):
+        active_checks.append(
+            ("verify_research_reviews", verify_research_reviews_observe.main)
+        )
+    for name, runner in active_checks:
         started = time.perf_counter()
         code = runner(root)
         elapsed = time.perf_counter() - started

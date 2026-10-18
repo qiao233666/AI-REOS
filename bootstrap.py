@@ -600,6 +600,11 @@ def install_mechanism(repo: Path, dry: bool, report: "list[str]") -> dict:
             if not dry:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 new_name.write_bytes(kit_bytes)
+            # v1.5.0 修复：CONFLICT 后磁盘上仍是**本地内容**，manifest 必须记录本地
+            # 实际哈希；否则每次升级都拿 kit 哈希与本地比、永久重复报同一冲突（永不收敛）。
+            # 记录本地哈希后：本地未再改 → 下次仍判 CONFLICT（提示尚未合并）；
+            # 一旦用户把本地改成与 kit 一致 → 自动转 KEEP，冲突自然消解。
+            new_files[rel] = dst_hash
     # kit 已删除的托管文件：只提示
     for rel in sorted(set(old_files) - set(new_files)):
         report.append(f"REMOVED? {rel}：当前 kit 已不含该托管文件（可能是升级删除），请人工确认后自行处理")
