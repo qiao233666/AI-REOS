@@ -112,8 +112,9 @@ class MaintenanceRepairs(unittest.TestCase):
     def alias(self, relative, target):
         path = self.root / relative
         if os.name == "nt":
+            # 云端Windows的PowerShell冷启动可能超过15秒；这里只调整测试夹具预算。
             completed = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
-                "New-Item -ItemType Junction -Path '" + str(path) + "' -Target '" + str(self.root / target) + "' | Out-Null"], capture_output=True, timeout=15)
+                "New-Item -ItemType Junction -Path '" + str(path) + "' -Target '" + str(self.root / target) + "' | Out-Null"], capture_output=True, timeout=60)
             self.assertEqual(0, completed.returncode, completed.stderr)
         else:
             path.symlink_to(self.root / target, target_is_directory=True)

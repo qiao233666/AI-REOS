@@ -1,10 +1,10 @@
 # 验证报告
 
-时间（UTC）：20261023T130925Z。Python 3.10.20，SQLite 3.51.2，Windows。
+时间（UTC）：20261023T131643Z。Python 3.10.20，SQLite 3.51.2，Windows。
 
 结果：通过；完整结果计数 170 项（超时则可能仅有部分输出）。返回码 0；跳过 0 项。
 
-命令：`python -B -m unittest discover -s tests -v`。完整输出：[unittest-20261023T130925Z.log](unittest-20261023T130925Z.log)。源码摘要及环境：[JSON](result-20261023T130925Z.json)。
+命令：`python -B -m unittest discover -s tests -v`。完整输出：[unittest-20261023T131643Z.log](unittest-20261023T131643Z.log)。源码摘要及环境：[JSON](result-20261023T131643Z.json)。
 
 覆盖事务回滚、交错重试、多个本地进程、逐项审核与采纳、来源变化、旧版召回、中文检索、争议传播、接管迟到、范围权限、时间回拨、阶段追溯、视图恢复、工具真实执行/失败/超时、资源占用和真实CLI合成示例。
 
