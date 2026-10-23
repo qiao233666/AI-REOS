@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aireos-framework"
+version = "2.0.0a1"
+description = "可追溯、可并行、可复用的本地项目工作框架"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+memory = ["qdrant-client[fastembed]>=1.20,<2", "fastembed>=0.9,<1"]
+
+[project.scripts]
+aireos = "aireos.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["aireos*"]
