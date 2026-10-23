@@ -33,6 +33,31 @@ class ReleasePackageTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 module.build(root,output,'v2.0.0-alpha.1')
 
+    def test_verification_timeout_keeps_partial_log_and_failed_report(self):
+        import contextlib
+        import io
+        import subprocess
+        from unittest.mock import patch
+        spec=importlib.util.spec_from_file_location('release_verifier',ROOT/'scripts/verify.py')
+        module=importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for partial in (b'last test still running', 'last test still running'):
+            with self.subTest(partial_type=type(partial).__name__), tempfile.TemporaryDirectory() as temporary:
+                failure=subprocess.TimeoutExpired(['synthetic'],120,output=partial,stderr=partial)
+                original_run=module.subprocess.run
+                def run(command,*args,**kwargs):
+                    if isinstance(command,list) and 'unittest' in command:
+                        raise failure
+                    return original_run(command,*args,**kwargs)
+                with patch.object(module.subprocess,'run',side_effect=run), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                    status=module.main(['--output',temporary])
+                self.assertEqual(1,status)
+                report=json.loads(next(Path(temporary).glob('result-*.json')).read_text(encoding='utf-8'))
+                self.assertFalse(report['passed'])
+                self.assertTrue(report['timed_out'])
+                self.assertEqual(124,report['returncode'])
+                self.assertIn('last test still running',(Path(temporary)/report['log']).read_text(encoding='utf-8'))
+
     def test_explicit_root_files_must_not_follow_links(self):
         from unittest.mock import patch
         spec=importlib.util.spec_from_file_location('release_builder',ROOT/'scripts/build_release.py')

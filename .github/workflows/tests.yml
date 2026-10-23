@@ -4,7 +4,9 @@ permissions:
   contents: read
 jobs:
   unittest:
+    timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
         python: ['3.10', '3.12']
