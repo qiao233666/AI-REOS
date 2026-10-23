@@ -72,5 +72,13 @@
     "world/tools/build_ledger_views.py": "525575c47d51722cb7c3b6143252eddd3b5262f1eef0cba0ad61a7ed14d82b80",
     "world/tools/build_world_registry.py": "a97f90c4f62c98a7c786555006c5db7c753a74ae0213733a86a054ec227102e8",
     "world/tools/verify_world_registry.py": "9878809dd2fc34c9262227db59e170ec918c6340cd0f01ee8bd018238394c874"
-  }
+  },
+  "concurrent_updates": [
+    {
+      "commit": "7ce7eee971affbd10ae55e1841d61d8cefae25fe",
+      "source_path": "README.md",
+      "archive_path": "README.upstream-7ce7eee.md",
+      "sha256": "029575c52cf3dfc0b9d7fc6a17124793ad618e7c79e4f276ccff6e61d188ece8"
+    }
+  ]
 }
