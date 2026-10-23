@@ -60,6 +60,19 @@ class EvidenceCollectionTests(unittest.TestCase):
         directory.mkdir(parents=True)
         return directory
 
+    def test_fixture_canonicalizes_temp_alias_for_path_fault_injection(self):
+        # 云端Windows可通过短名提供TEMP；路径别名不能让故障注入静默失效。
+        original = workflow.tempfile.TemporaryDirectory
+        def aliased_temp():
+            temporary = original()
+            alias = Path(temporary.name) / "alias"
+            alias.mkdir()
+            return SimpleNamespace(name=str(alias / ".."), cleanup=temporary.cleanup,
+                                   keep_alive=temporary)
+        with patch("test_workflow.tempfile.TemporaryDirectory", side_effect=aliased_temp):
+            workflow.WorkflowTests.setUp(self)
+        self.assertEqual(self.root, self.owner.store.root)
+
     @staticmethod
     def special_mode(path, kind):
         original = Path.lstat

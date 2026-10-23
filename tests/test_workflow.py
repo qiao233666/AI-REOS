@@ -16,7 +16,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIsNotNone(Project, "工作流尚未实现")
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / "project"
+        self.root = (Path(self.temp.name) / "project").resolve()
         init = Store.initialize(self.root)
         self.owner_token = Path(init["credential_file"]).read_text().strip()
         self.owner = Project(self.root, self.owner_token)

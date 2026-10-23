@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aireos-framework"
-version = "2.0.0a1"
+version = "2.0.0a2"
 description = "可追溯、可并行、可复用的本地项目工作框架"
 requires-python = ">=3.10"
 dependencies = []

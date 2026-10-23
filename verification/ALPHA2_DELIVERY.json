@@ -1,0 +1,20 @@
+{
+  "version": "2.0.0a2",
+  "reports": [
+    {
+      "environment": "python310",
+      "python": "3.10.20",
+      "sqlite": "3.51.2",
+      "tests": 169,
+      "report": "alpha2/python310/result-20261023T125706Z.json"
+    },
+    {
+      "environment": "python312",
+      "python": "3.12.4",
+      "sqlite": "3.45.3",
+      "tests": 169,
+      "report": "alpha2/python312/result-20261023T125649Z.json"
+    }
+  ],
+  "boundary": "仅合成验证；真实试点数据及凭据不在公开包中"
+}
