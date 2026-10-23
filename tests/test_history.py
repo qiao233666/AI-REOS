@@ -92,6 +92,54 @@ class HistoryTests(unittest.TestCase):
         self.assertNotIn(other['id'], json.dumps(result))
         self.assertTrue(result['history']['configured'])
 
+    def test_session_query_recalls_adopted_native_work_after_task_closes(self):
+        artifact,item=workflow.WorkflowTests.add_fact(self)
+        workflow.WorkflowTests.deliver(self,[item])
+        opinion=workflow.WorkflowTests.pass_review(self,item)
+        workflow.WorkflowTests.adopt(self,item,opinion)
+        self.owner.close_task(self.task['id'],'合成任务已完成','close-for-session')
+        result=session_context(self.owner.store,query='示例方法',max_chars=6000)
+        self.assertEqual([],result['tasks'])
+        self.assertIn(item['id'],[row['id'] for row in result['memory']['matches']])
+        self.assertEqual('adopted',result['memory']['reuse_status'][item['id']]['status'])
+
+    def test_session_query_includes_native_and_legacy_without_upgrading_either(self):
+        self.sources('- id: E-001\n  statement: sharedneedle 旧材料\n  status: active\n')
+        item=self.worker.add_item('sharedneedle 新交接','sharedneedle 本轮记录','unknown','合成',[],self.task['id'],'new-for-session')
+        result=session_context(self.owner.store,query='sharedneedle',max_chars=6000)
+        self.assertIn(item['id'],[row['id'] for row in result['memory']['matches']])
+        self.assertEqual('candidate',result['memory']['reuse_status'][item['id']]['status'])
+        self.assertEqual('historical_reference',result['history']['matches'][0]['authority'])
+
+    def test_session_without_query_does_not_search_either_memory_channel(self):
+        from unittest.mock import patch
+        self.sources()
+        with patch('aireos.semantic.MemoryService.query') as native, patch('aireos.history.HistoryArchive.query') as legacy:
+            result=session_context(self.owner.store)
+        native.assert_not_called()
+        legacy.assert_not_called()
+        self.assertNotIn('memory',result)
+
+    def test_session_combined_packet_obeys_whole_json_budget_and_keeps_visible_status(self):
+        self.sources(''.join('- id: E-'+str(index)+'\n  statement: budgetneedle '+('历史'*400)+'\n' for index in range(10)))
+        for index in range(12):
+            self.worker.add_item('budgetneedle '+str(index),'budgetneedle '+('新记录'*500),'unknown','合成',[],self.task['id'],'budget-'+str(index))
+        for budget in (2000,3000,6000):
+            with self.subTest(budget=budget):
+                result=session_context(self.owner.store,query='budgetneedle',max_chars=budget)
+                self.assertLessEqual(len(json.dumps(result,ensure_ascii=False)),budget)
+                visible={row['id'] for row in result['memory']['matches']+result['memory']['historical'] if row['kind']=='item'}
+                self.assertEqual(visible,set(result['memory']['reuse_status']))
+                self.assertTrue(result['truncated'])
+
+    def test_session_query_miss_does_not_create_authoritative_objects(self):
+        self.sources()
+        before=len(self.owner.store.list())
+        result=session_context(self.owner.store,query='missingneedle',max_chars=4000)
+        self.assertEqual([],result['memory']['matches'])
+        self.assertEqual([],result['history']['matches'])
+        self.assertEqual(before,len(self.owner.store.list()))
+
     def test_changed_file_during_read_is_not_claimed_current(self):
         from unittest.mock import patch
         archive, path = self.sources()

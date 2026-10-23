@@ -256,7 +256,7 @@ def session_context(store, output_prefix=None, query=None, max_chars=6000):
         raise FrameworkError('启动导航预算须为2000至50000字符')
     prefix=normalize_scope(output_prefix) if output_prefix else None
     result=dict(tasks=[],history=dict(configured=bool(HistoryArchive(store)._sources())),truncated=False,
-        guidance='先按实际问题查历史；历史仅参考。使用旧结论前展开原文及条件，在新任务声明reference输入。新交付仍经prepare、核查、逐项采纳；阶段说明用一两句普通话。')
+        guidance='按实际问题同时查新记录memory与旧原文history；核查和采纳状态随新记录返回，旧历史仅参考。片段不足时按id/rev或旧编号与摘要展开全文及条件；命中不证明科学正确。新交付仍经prepare、核查、逐项采纳；阶段说明用一两句普通话。')
     for task in store.list('task'):
         data=task['data']
         if data['status'] not in {'planned','running','delivered'} or (prefix and not any(within(output,prefix) for output in data['contract']['outputs'])):
@@ -268,8 +268,39 @@ def session_context(store, output_prefix=None, query=None, max_chars=6000):
             result['truncated']=True
             break
     if query:
-        remaining=max_chars-encoded_size(result)-50
-        result['history']=HistoryArchive(store).query(query,max_chars=max(1000,remaining))
+        from .semantic import MemoryService
+        # 查询才触发两路派生索引；不增加常驻模型或在默认启动时扫描历史。
+        channel_budget=max(1000,(max_chars-encoded_size(result)-160)//2)
+        native=MemoryService(store).query(query,limit=6,max_chars=channel_budget)
+        result['memory']={key:native[key] for key in
+            ('matches','historical','reuse_status','truncated','display_truncated','retrieval','coverage')}
+        result['history']=HistoryArchive(store).query(query,max_chars=channel_budget)
+        result['truncated']=result['truncated'] or native['truncated'] or native['display_truncated'] or result['history'].get('candidate_truncated',False) or result['history'].get('display_truncated',False)
+        # 底层片段预算不包含所有外层JSON元信息；以整个返回包再次限额。
+        # 只整项移除，保留显示项的来源与完整复用状态，避免把未审核项显示成可信。
+        while encoded_size(result)>max_chars:
+            memory=result['memory']
+            legacy=result['history']
+            choices=[]
+            if memory['matches'] or memory['historical']:
+                choices.append(('memory',encoded_size(memory)))
+            if legacy['matches']:
+                choices.append(('history',encoded_size(legacy)))
+            if choices:
+                channel=max(choices,key=lambda entry:entry[1])[0]
+                if channel=='memory':
+                    (memory['historical'] or memory['matches']).pop()
+                    visible={row['id'] for row in memory['matches']+memory['historical']}
+                    memory['reuse_status']={identifier:state for identifier,state in memory['reuse_status'].items() if identifier in visible}
+                    memory['display_truncated']=True
+                else:
+                    legacy['matches'].pop()
+                    legacy['display_truncated']=True
+            elif result['tasks']:
+                result['tasks'].pop()
+            else:
+                raise FrameworkError('启动导航元信息超出预算，须提高预算')
+            result['truncated']=True
     if encoded_size(result)>max_chars:
         raise FrameworkError('启动导航超出预算，须缩小范围')
     return result

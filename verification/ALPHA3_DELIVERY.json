@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0a3",
+  "reports": [
+    {
+      "python": "3.10.20",
+      "sqlite": "3.51.2",
+      "tests": 175,
+      "report": "alpha3/python310/result-20261023T140932Z.json"
+    },
+    {
+      "python": "3.12.4",
+      "sqlite": "3.45.3",
+      "tests": 175,
+      "report": "alpha3/python312/result-20261023T141025Z.json"
+    }
+  ],
+  "limitation": "仅合成回归；真实任务交接与独立来源核对留在本地项目"
+}

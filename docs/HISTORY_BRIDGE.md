@@ -22,7 +22,7 @@ history-get输入`{"path":"aiops/FAILURES.md","legacy_id":"F-001","source_sha256
 
 ## 日常入口与责任
 
-session-context输入`{"output_prefix":"pilot","query":"实际历史问题","max_chars":6000}`，只给该输出范围的活跃新任务、有界历史片段及后续操作提示。没有query时只生成轻量导航，不扫描全部旧账本。history-query与原memory-query分别对应旧原文与新正式记录，不建立第二套科学事实。
+session-context输入`{"output_prefix":"pilot","query":"实际历史问题","max_chars":6000}`，给该输出范围的活跃任务；提供query时，同时返回memory（新版正式记录）和history（旧原文），避免已完成的新成果退出任务导航后被遗漏。memory保留当前审核、采纳、依据等复用状态，历史原词不升级为新版状态；整个JSON共同受max_chars限制，截断会标记，完整正文按新id/rev或旧编号及摘要展开。output_prefix只筛活跃任务导航，不是检索读取权限边界。没有query时只生成轻量导航，不触发两路检索。history-query与原memory-query仍可分别查旧原文和新正式记录，不建立第二套科学事实。
 
 检索本身不产生正式收据，也不自动向新任务背书。实际复用旧材料时，展开准确版本、确认条件，在新任务inputs中声明reference；实际采用哪些依据需由核查者判断。新交付仍走prepare→submit→明确版本review→adopt/close-task。不得把“找到旧记录”当作新的独立审核。
 
