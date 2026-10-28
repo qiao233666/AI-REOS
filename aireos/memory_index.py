@@ -6,7 +6,7 @@ import sqlite3
 from .errors import FrameworkError
 from .storage import canonical, digest
 
-KINDS = {"item", "case", "stage", "tool", "decision", "review", "resource"}
+KINDS = {"item", "case", "stage", "tool", "decision", "review", "resource", "memory_note"}
 
 
 def relations(data):

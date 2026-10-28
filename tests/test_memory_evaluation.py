@@ -36,3 +36,37 @@ class MemoryEvaluationTests(unittest.TestCase):
         self.questions.write_text(json.dumps([dict(question_id="q", query="x", relevant_doc_ids=["not-in-corpus"], type="literal")]), encoding="utf-8")
         with self.assertRaises(FrameworkError):
             evaluate(self.corpus, self.questions, self.root / "evaluation")
+
+    def test_hit_does_not_imply_all_required_evidence_found(self):
+        self.questions.write_text(json.dumps([dict(question_id="q", query="网格改变", relevant_doc_ids=["doc-a", "doc-b"], required_doc_ids=["doc-a", "doc-b"], type="literal")]), encoding="utf-8")
+        result = evaluate(self.corpus, self.questions, self.root / "evaluation")
+        row = result["results"][0]
+        self.assertTrue(row["hit_at_5"])
+        self.assertEqual(0.5, row["required_recall_at_5"])
+        self.assertFalse(row["required_complete_at_5"])
+        self.assertEqual(["doc-b"], row["missing_required_at_5"])
+        self.assertEqual(0.5, result["by_type"]["literal"]["required_recall_at_5"])
+
+    def test_old_questions_default_to_relevant_as_required(self):
+        result = evaluate(self.corpus, self.questions, self.root / "evaluation")
+        self.assertEqual(["doc-a"], result["results"][0]["required"])
+        self.assertEqual(1.0, result["metrics"]["required_complete_at_5"])
+
+    def test_invalid_required_ids_are_rejected(self):
+        for index, required in enumerate((["missing"], [], ["doc-a", "doc-a"])):
+            self.questions.write_text(json.dumps([dict(question_id="q", query="网格", relevant_doc_ids=["doc-a"], required_doc_ids=required)]), encoding="utf-8")
+            with self.subTest(required=required), self.assertRaises(FrameworkError):
+                evaluate(self.corpus, self.questions, self.root / ("out" + str(index)))
+
+    def test_absence_question_is_reported_separately_without_negative_inference(self):
+        questions = [dict(question_id="q", query="网格改变", relevant_doc_ids=[], expected_absence=True, type="absence")]
+        self.questions.write_text(json.dumps(questions), encoding="utf-8")
+        result = evaluate(self.corpus, self.questions, self.root / "evaluation")
+        self.assertIsNone(result["metrics"]["required_complete_at_5"])
+        self.assertIsNone(result["results"][0]["required_recall_at_5"])
+        self.assertEqual(1, result["metrics"]["no_evidence_questions"])
+        self.assertEqual(["doc-a"], result["results"][0]["returned_candidates"])
+        questions[0]["expected_absence"] = False
+        self.questions.write_text(json.dumps(questions), encoding="utf-8")
+        with self.assertRaises(FrameworkError):
+            evaluate(self.corpus, self.questions, self.root / "invalid")

@@ -27,6 +27,11 @@ def encoded_size(value):
 def records(text, format):
     """只识别显式编号边界，不执行YAML标签，也不推断条目内容的真假。"""
     lines = text.splitlines(keepends=True)
+    if format == 'document':
+        if len(text.encode('utf-8')) > MAX_ENTRY_BYTES:
+            raise FrameworkError('历史单条正文超过预算，须先明确拆分边界')
+        return [dict(legacy_id='DOC-1', text=text, start_line=1, end_line=len(lines),
+            legacy_status='unknown', entry_sha256=hashlib.sha256(text.encode('utf-8')).hexdigest())]
     if format == 'yaml-records':
         anchors = [(index, len(match[1])) for index, line in enumerate(lines)
             if (match := re.match(r'^( *)- (?:id|schema_version):\s*', line))]
@@ -96,20 +101,31 @@ class HistoryArchive:
                 raise FrameworkError('须明确登记1至16个历史来源，不能全仓自动扫描')
             result, seen = [], set()
             for source in sources:
-                if not isinstance(source, dict) or set(source) != {'path', 'format'}:
-                    raise FrameworkError('每个历史来源须仅含path和format')
+                if not isinstance(source, dict) or not {'path', 'format'} <= set(source) or set(source) - {'path', 'format', 'categories'}:
+                    raise FrameworkError('每个历史来源须含path、format及可选categories')
                 path, _ = self._path(source['path'])
                 tx.require_scope(path)
-                if path in seen or source['format'] not in {'yaml-records', 'markdown'}:
+                if path in seen or source['format'] not in {'yaml-records', 'markdown', 'document'}:
                     raise FrameworkError('重复来源或未知历史格式')
                 seen.add(path)
-                result.append(dict(path=path, format=source['format']))
+                categories = self._categories(source)
+                result.append(dict(path=path, format=source['format'], categories=categories))
             return tx.create('history_config', dict(sources=result, authority='historical_reference', api=1))
         return self.store.mutate('history.configure', dict(sources=sources), request_id, 'plan', apply)
 
     def _sources(self):
         configs = self.store.list('history_config')
         return configs[-1]['data']['sources'] if configs else []
+
+    @staticmethod
+    def _categories(source):
+        categories = source.get('categories')
+        if 'categories' not in source:
+            name = Path(source['path']).stem.upper()
+            categories = ['risks' if name == 'FAILURES' else 'decisions' if name in {'DECISIONS', 'ASSUMPTIONS'} else 'implementations']
+        if not isinstance(categories, list) or not categories or any(not isinstance(c, str) or c not in {'risks', 'decisions', 'implementations'} for c in categories):
+            raise FrameworkError('历史分类须为非空的已知分类列表')
+        return list(dict.fromkeys(categories))
 
     def _read(self, source):
         relative, path = self._path(source['path'])
@@ -133,6 +149,7 @@ class HistoryArchive:
         connection.executescript('''
             CREATE TABLE IF NOT EXISTS history_sources(path TEXT PRIMARY KEY,checksum TEXT,format TEXT);
             CREATE TABLE IF NOT EXISTS history_snapshots(path TEXT,checksum TEXT,format TEXT,PRIMARY KEY(path,checksum));
+            CREATE TABLE IF NOT EXISTS history_snapshot_formats(path TEXT,checksum TEXT,format TEXT,PRIMARY KEY(path,checksum,format));
             CREATE TABLE IF NOT EXISTS history_entries(path TEXT,legacy_id TEXT,text TEXT,start_line INTEGER,end_line INTEGER,legacy_status TEXT,entry_sha256 TEXT,source_sha256 TEXT,UNIQUE(path,legacy_id));
             CREATE VIRTUAL TABLE IF NOT EXISTS history_fts USING fts5(legacy_id,text,tokenize='trigram');
         ''')
@@ -168,6 +185,7 @@ class HistoryArchive:
                 connection.execute('INSERT INTO history_fts(rowid,legacy_id,text) VALUES(?,?,?)', (cursor.lastrowid,item['legacy_id'],item['text']))
             connection.execute('INSERT INTO history_sources VALUES(?,?,?)', (source['path'],checksum,source['format']))
             connection.execute('INSERT OR IGNORE INTO history_snapshots VALUES(?,?,?)', (source['path'],checksum,source['format']))
+            connection.execute('INSERT OR IGNORE INTO history_snapshot_formats VALUES(?,?,?)', (source['path'],checksum,source['format']))
         if count > MAX_RECORDS:
             raise FrameworkError('历史来源总条目数超过预算')
         connection.commit()
@@ -179,128 +197,159 @@ class HistoryArchive:
         connection.execute('DELETE FROM history_entries WHERE path=?', (path,))
         connection.execute('DELETE FROM history_sources WHERE path=?', (path,))
 
-    def query(self, query, limit=12, max_chars=6000):
+    def collect(self, query, limit=12, paths=None):
         if not isinstance(query, str) or not query.strip():
             raise FrameworkError('历史检索问题不能为空')
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100:
             raise FrameworkError('历史候选条数须为1至100')
-        if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1000 <= max_chars <= 50000:
-            raise FrameworkError('历史显示预算须为1000至50000字符')
         sources = self._sources()
-        result = dict(configured=bool(sources), matches=[], coverage=COVERAGE, candidate_truncated=False, display_truncated=False)
+        configured = {source['path']: source for source in sources}
+        if paths is not None and (not isinstance(paths, list) or not paths or any(not isinstance(p, str) or p not in configured for p in paths)):
+            raise FrameworkError('历史来源筛选须为已登记路径的非空列表')
+        selected = set(paths) if paths is not None else set(configured)
+        result = dict(configured=bool(sources), matches=[], sources=[], coverage=COVERAGE, candidate_truncated=False)
         if not sources:
             return result
         connection = self._database()
         try:
-            result['indexed_records'] = self._refresh(connection, sources)
+            self._refresh(connection, sources)
+            for source in sources:
+                info = connection.execute('SELECT checksum FROM history_sources WHERE path=?', (source['path'],)).fetchone()
+                count = connection.execute('SELECT COUNT(*) FROM history_entries WHERE path=?', (source['path'],)).fetchone()[0]
+                result['sources'].append(dict(path=source['path'], format=source['format'], categories=self._categories(source), sha256=info['checksum'], records=count))
             exact = connection.execute('SELECT * FROM history_entries WHERE legacy_id=? ORDER BY path', (query.strip(),)).fetchall()
             tokens, short = phrases(query)
             rows = []
-            if tokens:
-                expression = ' OR '.join('"'+token.replace('"','""')+'"' for token in tokens)
-                rows = connection.execute('SELECT e.* FROM history_fts f JOIN history_entries e ON e.rowid=f.rowid WHERE history_fts MATCH ? ORDER BY rank,e.path,e.legacy_id LIMIT ?', (expression,limit+1)).fetchall()
-            if short:
-                needles = ['%'+part.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%' for part in short]
-                clause = ' OR '.join("text LIKE ? ESCAPE '\\'" for _ in needles)
-                rows += connection.execute('SELECT * FROM history_entries WHERE '+clause+' ORDER BY path,legacy_id LIMIT ?', [*needles,limit+1]).fetchall()
+            for path in sorted(selected):
+                if tokens:
+                    expression = ' OR '.join('"'+token.replace('"','""')+'"' for token in tokens)
+                    found = connection.execute('SELECT e.*, rank AS _rank FROM history_fts f JOIN history_entries e ON e.rowid=f.rowid WHERE history_fts MATCH ? AND e.path=? ORDER BY rank,e.legacy_id LIMIT ?', (expression,path,limit+1)).fetchall()
+                    result['candidate_truncated'] |= len(found) > limit
+                    rows.extend(found)
+                if short:
+                    needles = ['%'+part.replace('\\','\\\\').replace('%','\\%').replace('_','\\_')+'%' for part in short]
+                    clause = ' OR '.join("text LIKE ? ESCAPE '\\'" for _ in needles)
+                    found = connection.execute('SELECT *, NULL AS _rank FROM history_entries WHERE path=? AND ('+clause+') ORDER BY legacy_id LIMIT ?', [path,*needles,limit+1]).fetchall()
+                    result['candidate_truncated'] |= len(found) > limit
+                    rows.extend(found)
+            rows.sort(key=lambda row: (row['_rank'] is None, row['_rank'] or 0, row['path'], row['legacy_id']))
             chosen, seen = [], set()
-            for row in list(exact)+list(rows):
+            def add(row):
                 key = row['path'], row['legacy_id']
-                if key not in seen:
+                if row['path'] in selected and key not in seen and len(chosen) < limit:
                     chosen.append(row)
                     seen.add(key)
-            result['candidate_truncated'] = len(chosen) > limit
-            for row in chosen[:limit]:
-                body, start, end = window(row['text'],query,600)
-                card = dict(legacy_id=row['legacy_id'],authority='historical_reference',legacy_status=row['legacy_status'],
-                    body=body,partial=start>0 or end<len(row['text']), source=dict(path=row['path'],sha256=row['source_sha256'],
-                        entry_sha256=row['entry_sha256'],start_line=row['start_line'],end_line=row['end_line'],fragment_start=start,fragment_end=end))
-                result['matches'].append(card)
-                if encoded_size(result)>max_chars:
-                    result['matches'].pop()
-                    result['display_truncated']=True
-                    break
-                result['display_truncated'] = result['display_truncated'] or card['partial']
+            for row in exact:
+                add(row)
+            for category in ('risks', 'decisions', 'implementations'):
+                if any(category in self._categories(configured[r['path']]) for r in chosen):
+                    continue
+                row = next((r for r in rows if category in self._categories(configured[r['path']]) and (r['path'],r['legacy_id']) not in seen), None)
+                if row is not None:
+                    add(row)
+            for row in rows:
+                add(row)
+            all_keys = {(row['path'], row['legacy_id']) for row in list(exact)+rows if row['path'] in selected}
+            result['candidate_truncated'] |= len(all_keys) > len(chosen)
+            result['matches'] = [{**{key:row[key] for key in row.keys() if key != '_rank'}, 'categories':self._categories(configured[row['path']]), 'source_format':configured[row['path']]['format']} for row in chosen]
             return result
         finally:
             connection.close()
 
-    def get(self, path, legacy_id, source_sha256=None):
+    def query(self, query, limit=12, max_chars=6000, paths=None):
+        if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1000 <= max_chars <= 50000:
+            raise FrameworkError('历史显示预算须为1000至50000字符')
+        collected = self.collect(query, limit, paths)
+        result = dict(configured=collected['configured'], matches=[], coverage=collected['coverage'],
+            candidate_truncated=collected['candidate_truncated'], display_truncated=False,
+            indexed_records=sum(s['records'] for s in collected['sources']),
+            source_coverage=dict(configured=len(collected['sources']), selected=len(set(paths)) if paths is not None else len(collected['sources'])))
+        for row in collected['matches']:
+            body, start, end = window(row['text'],query,600)
+            card = dict(legacy_id=row['legacy_id'],authority='historical_reference',legacy_status=row['legacy_status'], categories=row['categories'],
+                body=body,partial=start>0 or end<len(row['text']), source=dict(path=row['path'],sha256=row['source_sha256'],
+                    format=row['source_format'],entry_sha256=row['entry_sha256'],start_line=row['start_line'],end_line=row['end_line'],fragment_start=start,fragment_end=end))
+            result['matches'].append(card)
+            if encoded_size(result)>max_chars:
+                result['matches'].pop()
+                result['display_truncated']=True
+                break
+            result['display_truncated'] = result['display_truncated'] or card['partial']
+        if encoded_size(result)>max_chars:
+            raise FrameworkError('历史检索元信息超出预算')
+        return result
+
+    def read(self, path, legacy_id, source_sha256, offset=0, max_chars=6000, source_format=None):
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise FrameworkError('分页偏移须为非负整数')
+        if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1000 <= max_chars <= 50000:
+            raise FrameworkError('历史显示预算须为1000至50000字符')
+        if not isinstance(source_sha256, str) or not source_sha256:
+            raise FrameworkError('分页须指定已记录来源快照')
+        item = self.get(path, legacy_id, source_sha256, source_format=source_format)
+        content = item.pop('text')
+        if offset > len(content):
+            raise FrameworkError('分页偏移超出正文')
+        result = {**item, 'text':'', 'offset':offset, 'next_offset':None, 'partial':offset > 0}
+        if encoded_size(result) > max_chars:
+            raise FrameworkError('历史分页元信息超出预算')
+        low, high = 0, min(len(content)-offset, max_chars)
+        while low < high:
+            size = (low+high+1)//2
+            end = offset+size
+            result.update(text=content[offset:end], next_offset=end if end < len(content) else None, partial=offset>0 or end<len(content))
+            if encoded_size(result) <= max_chars:
+                low = size
+            else:
+                high = size-1
+        end = offset+low
+        if end == offset and end < len(content):
+            raise FrameworkError('历史分页预算不足以容纳正文')
+        result.update(text=content[offset:end], next_offset=end if end<len(content) else None, partial=offset>0 or end<len(content))
+        if encoded_size(result)>max_chars:
+            raise FrameworkError('历史分页元信息超出预算')
+        return result
+
+    def get(self, path, legacy_id, source_sha256=None, source_format=None):
         sources = {source['path']:source for source in self._sources()}
         if path not in sources:
             raise FrameworkError('未登记该历史来源')
         if source_sha256 is None:
             content,text = self._read(sources[path])
             checksum=hashlib.sha256(content).hexdigest()
-            format=sources[path]['format']
+            formats=[sources[path]['format']]
+            if source_format is not None and source_format != formats[0]:
+                raise FrameworkError('当前来源未使用指定格式')
         else:
             connection=self._database()
             try:
-                row=connection.execute('SELECT format FROM history_snapshots WHERE path=? AND checksum=?',(path,source_sha256)).fetchone()
-                if not row:
+                rows=connection.execute('SELECT format FROM history_snapshots WHERE path=? AND checksum=? UNION SELECT format FROM history_snapshot_formats WHERE path=? AND checksum=?', (path,source_sha256,path,source_sha256)).fetchall()
+                formats=[row['format'] for row in rows]
+                if not formats:
                     raise FrameworkError('未记录该来源的指定快照，不能猜测关联')
+                if source_format is not None:
+                    if source_format not in formats:
+                        raise FrameworkError('该快照未记录指定来源格式')
+                    formats=[source_format]
                 content=self.store.blob(source_sha256)
                 text=content.decode('utf-8-sig')
                 checksum=source_sha256
-                format=row['format']
             finally:
                 connection.close()
-        match=next((item for item in records(text,format) if item['legacy_id']==legacy_id),None)
-        if match is None:
+        matches=[]
+        for format in formats:
+            match=next((item for item in records(text,format) if item['legacy_id']==legacy_id),None)
+            if match is not None:
+                matches.append((format,match))
+        if not matches:
             raise FrameworkError('指定快照中未找到旧编号')
-        return {**match,'path':path,'source_sha256':checksum,'authority':'historical_reference'}
+        if any(match != matches[0][1] for _,match in matches[1:]):
+            raise FrameworkError('同一编号存在不同格式解释，请明确指定source_format')
+        format,match=matches[0]
+        return {**match,'path':path,'source_sha256':checksum,'source_format':format,'authority':'historical_reference'}
 
 
 def session_context(store, output_prefix=None, query=None, max_chars=6000):
-    if isinstance(max_chars,bool) or not isinstance(max_chars,int) or not 2000<=max_chars<=50000:
-        raise FrameworkError('启动导航预算须为2000至50000字符')
-    prefix=normalize_scope(output_prefix) if output_prefix else None
-    result=dict(tasks=[],history=dict(configured=bool(HistoryArchive(store)._sources())),truncated=False,
-        guidance='按实际问题同时查新记录memory与旧原文history；核查和采纳状态随新记录返回，旧历史仅参考。片段不足时按id/rev或旧编号与摘要展开全文及条件；命中不证明科学正确。新交付仍经prepare、核查、逐项采纳；阶段说明用一两句普通话。')
-    for task in store.list('task'):
-        data=task['data']
-        if data['status'] not in {'planned','running','delivered'} or (prefix and not any(within(output,prefix) for output in data['contract']['outputs'])):
-            continue
-        card=dict(id=task['id'],title=data['contract']['title'][:120],status=data['status'])
-        result['tasks'].append(card)
-        if encoded_size(result)>max_chars//2:
-            result['tasks'].pop()
-            result['truncated']=True
-            break
-    if query:
-        from .semantic import MemoryService
-        # 查询才触发两路派生索引；不增加常驻模型或在默认启动时扫描历史。
-        channel_budget=max(1000,(max_chars-encoded_size(result)-160)//2)
-        native=MemoryService(store).query(query,limit=6,max_chars=channel_budget)
-        result['memory']={key:native[key] for key in
-            ('matches','historical','reuse_status','truncated','display_truncated','retrieval','coverage')}
-        result['history']=HistoryArchive(store).query(query,max_chars=channel_budget)
-        result['truncated']=result['truncated'] or native['truncated'] or native['display_truncated'] or result['history'].get('candidate_truncated',False) or result['history'].get('display_truncated',False)
-        # 底层片段预算不包含所有外层JSON元信息；以整个返回包再次限额。
-        # 只整项移除，保留显示项的来源与完整复用状态，避免把未审核项显示成可信。
-        while encoded_size(result)>max_chars:
-            memory=result['memory']
-            legacy=result['history']
-            choices=[]
-            if memory['matches'] or memory['historical']:
-                choices.append(('memory',encoded_size(memory)))
-            if legacy['matches']:
-                choices.append(('history',encoded_size(legacy)))
-            if choices:
-                channel=max(choices,key=lambda entry:entry[1])[0]
-                if channel=='memory':
-                    (memory['historical'] or memory['matches']).pop()
-                    visible={row['id'] for row in memory['matches']+memory['historical']}
-                    memory['reuse_status']={identifier:state for identifier,state in memory['reuse_status'].items() if identifier in visible}
-                    memory['display_truncated']=True
-                else:
-                    legacy['matches'].pop()
-                    legacy['display_truncated']=True
-            elif result['tasks']:
-                result['tasks'].pop()
-            else:
-                raise FrameworkError('启动导航元信息超出预算，须提高预算')
-            result['truncated']=True
-    if encoded_size(result)>max_chars:
-        raise FrameworkError('启动导航超出预算，须缩小范围')
-    return result
+    """共同接手入口，保留原参数与调用位置。"""
+    from .session import context
+    return context(store,output_prefix=output_prefix,query=query,max_chars=max_chars)

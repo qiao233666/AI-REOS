@@ -36,6 +36,7 @@ def present(tx, current, historical, query, max_chars, view):
     remaining, truncated = max_chars, False
     statuses, visible = {}, [[], []]
     status_cache = {}
+    catalog_entries = None
     for source, destination in zip((current, historical), visible):
         for obj in source:
             data = obj["data"]
@@ -44,13 +45,18 @@ def present(tx, current, historical, query, max_chars, view):
                 if obj["id"] not in status_cache:
                     status_cache[obj["id"]] = Project._status(tx, obj["id"])
                 status = status_cache[obj["id"]]
+            if obj['kind']=='memory_note':
+                from .memory_catalog import MemoryCatalog, snapshot
+                if catalog_entries is None:
+                    _,catalog_entries=snapshot(tx.store)
+                status=MemoryCatalog(tx.store).note_state(obj,catalog_entries)
             text, field = body_text(obj)
             title = str(data.get("title", data.get("manifest", {}).get("name", obj["kind"])))
             card = {"id": obj["id"], "rev": obj["rev"], "kind": obj["kind"],
                 "title": title[:120],
                 "created": obj["created"], "body": "", "source": {"field": field, "start": 0, "end": 0}, "partial": False}
             fields_omitted = ["title"] if len(title) > 120 else []
-            for key in ("scope", "classification", "origin", "verdict", "action", "status"):
+            for key in ("scope", "classification", "origin", "verdict", "action", "status", "authority"):
                 if key in data:
                     card[key] = data[key][:240] if isinstance(data[key], str) else data[key]
                     if card[key] != data[key]:

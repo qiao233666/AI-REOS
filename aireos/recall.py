@@ -95,6 +95,10 @@ def check(tx, receipt_id, task_id=None):
         reasons.append("任务合同已变化")
     from .inputs import validate
     reasons.extend(validate(tx, task["data"]["contract"].get("inputs", [])))
+    from . import prework
+    history_reasons, history_warnings = prework.validate(tx, data.get('history_check'), data['query'])
+    reasons.extend(history_reasons)
+    warnings.extend(history_warnings)
     delta_checked = 0
     if data["epoch"] != tx.store.epoch(tx.connection):
         if data.get("receipt_version", 1) < 2 or task["data"]["contract"].get("recall_mode") == "strict":

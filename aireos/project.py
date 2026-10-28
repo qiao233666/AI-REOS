@@ -65,24 +65,38 @@ class Project:
             raise FrameworkError("上下文显示预算必须为1000至50000字符")
         def apply(tx):
             task = typed(tx, task_id, "task")
+            from . import prework
             from .inputs import objects as input_objects
             seeds = input_objects(tx, task["data"]["contract"].get("inputs", []))
             seeds.extend(obj for obj in tx.list("item") if obj["data"]["task"] == task_id)
             result = recall.search(tx, query, limit, seeds=seeds)
             objects = {obj["id"]: obj for obj in result["matches"]}
+            legacy = prework.capture(self.store, tx, query, limit, task['data']['contract']['outputs'],
+                [ref for obj in objects.values() if obj['kind']=='memory_note' for ref in obj['data']['sources']])
             receipt = tx.create("receipt", {"project": self.store.project_id(tx.connection),
                 "receipt_version": 2, "watermark": tx.connection.execute("SELECT COALESCE(MAX(rowid),0) FROM versions").fetchone()[0],
                 "task": task_id, "contract": recall.contract_hash(task), "epoch": self.store.epoch(tx.connection),
                 "query": query, "refs": [recall.reference(obj) for obj in objects.values()],
                 "historical": [recall.reference(obj) for obj in result["historical"]],
-                "truncated": result["truncated"], "coverage": result["coverage"]})
+                "truncated": result["truncated"], "coverage": result["coverage"],
+                "history_check": legacy['check']})
             from .memory_packet import present
-            display = present(tx, list(objects.values()), result["historical"], query, max_chars, view)
-            return {**receipt, **{key: value for key, value in display.items() if key != "current"},
+            display = present(tx, list(objects.values()), result["historical"], query,
+                max(1000,max_chars//2) if legacy['configured'] else max_chars, view)
+            response = {**receipt, **{key: value for key, value in display.items() if key != "current"},
                 "context": display["current"], "retrieval": result["retrieval"],
                 "retrieval_note": "片段不改写原文，source给出正文字符位置。收据绑定完整版本；未显示内容按data.refs中的id/rev用get补取。状态表示当前复用条件，不证明已读完或科学正确。"}
+            if legacy['configured'] or legacy['constraints']:
+                response['history']=prework.packet(legacy,query,max(1000,max_chars//2))
+                response['constraints']=legacy['constraints']
+                return prework.fit_prepare(response,max(1000,max_chars-180))
+            return response
         # 任一登记角色均可检索；不把读资料当作决策权限。
-        return self.store.mutate("context.prepare", dict(task=task_id, query=query, limit=limit, max_chars=max_chars, view=view), request_id, None, apply)
+        response=self.store.mutate("context.prepare", dict(task=task_id, query=query, limit=limit, max_chars=max_chars, view=view), request_id, None, apply)
+        if 'history' in response:
+            from .reading import record
+            response=record(self.store,'task:'+task_id,response)
+        return response
 
     def check_receipt(self, receipt_id):
         with self.store.connection() as connection:

@@ -11,7 +11,7 @@ from .storage import Store
 
 
 READ_ONLY = {"get", "list", "events", "status", "check-receipt", "trace", "views-status", "memory-query", "run-evidence",
-    "history-query", "history-get", "session-context"}
+    "history-query", "history-get", "history-read", "session-context", "reading-usage"}
 PROJECT_COMMANDS = {
     "create-task": "create_task",
     "prepare": "prepare",
@@ -40,7 +40,7 @@ COMMANDS = READ_ONLY | set(PROJECT_COMMANDS) | {
     "prepare-external-review", "run-external-review",
     "register-tool", "set-tool-enabled", "run-tool", "publish",
     "memory-configure", "deliver-batch", "record-reviews", "finalize-task", "restore-run",
-    "history-configure",
+    "history-configure", "import-history", "add-memory-note", "add-history-link", "prework-configure",
 }
 
 
@@ -99,11 +99,19 @@ def _dispatch(args, params):
             if params:
                 raise ValueError("events 不接受输入参数")
             return store.events()
-        if command in {"history-query", "history-get", "session-context"}:
+        if command=='reading-usage':
+            from .reading import usage
+            return usage(store,**params)
+        if command in {"history-query", "history-get", "history-read", "session-context"}:
             from .history import HistoryArchive, session_context
             archive = HistoryArchive(store)
-            method = {"history-query": archive.query, "history-get": archive.get,
+            method = {"history-query": archive.query, "history-get": archive.get, "history-read":archive.read,
                 "session-context": lambda **values: session_context(store, **values)}[command]
+            if command=='history-read':
+                from .reading import record
+                arguments=dict(params)
+                arguments['max_chars']=max(1000,arguments.get('max_chars',6000)-180)
+                return record(store,'session',_call(method,arguments))
             return _call(method, params)
         project = Project(args.project, token)
         if command == "status":
@@ -125,6 +133,12 @@ def _dispatch(args, params):
     if not args.request_id:
         raise ValueError("写操作必须通过 CLI 明确提供 --request-id")
     project = Project(args.project, token)
+    if command in {'import-history','add-memory-note','add-history-link','prework-configure'}:
+        from .memory_catalog import MemoryCatalog
+        catalog=MemoryCatalog(store)
+        method={'import-history':catalog.import_history,'add-memory-note':catalog.add_note,
+            'add-history-link':catalog.add_link,'prework-configure':catalog.configure}[command]
+        return _call(method,params,args.request_id)
     if command == "history-configure":
         from .history import HistoryArchive
         return _call(HistoryArchive(store).configure, params, args.request_id)
