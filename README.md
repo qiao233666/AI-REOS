@@ -2,6 +2,8 @@
 
 这是可运行的 **2.0.0-alpha.4 预览版**，由本地0.4.0原型继续发展。默认没有项目事实、任务、节点、模型渠道或凭据。先在空项目或明确边界的真实任务中试用，再决定是否迁移整个项目。
 
+**第一次使用，先读 [运行指南：从你交任务到最终完成](docs/WORKFLOW_GUIDE.md)。** 它用一个完整例子说明主控、执行、审核、返修、验收和手账；关键职责使用哪个模型由你指定，辅助子代理由主控在授权内安排。三个责任区不要求三个常驻 AI，当前也没有自动选择全部模型的后台调度器。
+
 GitHub旧1.5.0安装包完整保留于[旧版归档](https://github.com/qiao233666/AI-REOS/tree/main/legacy/kit-v1.5.0)，旧标签与提交保留；此版不是旧bootstrap的直接覆盖升级。版本与兼容说明见[CHANGELOG](CHANGELOG.md)。
 
 它把工作分成三个责任区：**项目统筹**决定做什么及采纳什么；**执行与集成**产出候选；**独立核查**检查具体产物。三者共用历史、检索、输出协调、工具目录和阶段手账。审核通过不会自动变成正式结论。
@@ -19,7 +21,7 @@ flowchart LR
   H --- D
 ```
 
-建议先看 [概念说明](docs/CONCEPTS.md)，再看 [修订设计](docs/DESIGN.md) 和 [Astra 意见处理](docs/REVIEW_DECISIONS.md)。实际工作规则在 [操作协议](docs/PROTOCOLS.md)，命令在 [CLI 说明](docs/CLI.md)。测试结果见 [验证报告](verification/REPORT.md)。
+阅读顺序：[运行指南](docs/WORKFLOW_GUIDE.md) → [概念说明](docs/CONCEPTS.md) → [操作协议](docs/PROTOCOLS.md)；需要实际调用时查 [CLI 说明](docs/CLI.md)。架构背景在 [修订设计](docs/DESIGN.md) 和 [Astra 意见处理](docs/REVIEW_DECISIONS.md)，测试结果见 [验证报告](verification/REPORT.md)。
 
 本次更新用现成的 SQLite 全文检索保存机器可查的历史，保留可选的本地语义检索；人的阶段手账继续单独展示。文件快照、索引更新、交付登记、核查录入和结案由程序完成，不需要模型持续照看框架。AI 负责说明做了什么、提供判断与依据，有权角色负责审核和采纳。见 [本地记忆与操作说明](docs/LOCAL_MEMORY_USAGE.md) 和 [本次审查处理](docs/LOCAL_MEMORY_REVIEW.md)。
 

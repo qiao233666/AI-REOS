@@ -1,5 +1,7 @@
 # JSON 命令行
 
+第一次接触框架，先读[运行指南：从你交任务到最终完成](WORKFLOW_GUIDE.md)。本页是负责调用程序的 AI 或接入者使用的参数参考，不要求普通用户手动逐条记账。关键职责的模型选择由用户指定；命令本身不替用户选择模型。
+
 2.0预览版另提供history-configure、history-query、history-get、session-context，参数与边界见[旧账本接入](HISTORY_BRIDGE.md)。
 
 入口形式：
