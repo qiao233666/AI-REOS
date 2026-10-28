@@ -279,7 +279,7 @@ class MemoryService:
             return tx.create("memory_config", config)
         return self.store.mutate("memory.configure", request, request_id, "plan", apply)
 
-    def query(self, query, limit=12, max_chars=12000, view="brief"):
+    def query(self, query, limit=12, max_chars=10000, view="brief"):
         if not isinstance(query, str) or not query.strip():
             raise FrameworkError("检索问题不能为空")
         if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1000 <= max_chars <= 50000:

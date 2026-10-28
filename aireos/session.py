@@ -6,7 +6,7 @@ from .memory_catalog import applicable_constraints, latest
 from . import prework
 
 
-def context(store,output_prefix=None,query=None,max_chars=6000):
+def context(store,output_prefix=None,query=None,max_chars=10000):
     if isinstance(max_chars,bool) or not isinstance(max_chars,int) or not 2000<=max_chars<=50000:
         raise FrameworkError('启动导航预算须为2000至50000字符')
     prefix=normalize_scope(output_prefix) if output_prefix else None

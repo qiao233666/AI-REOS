@@ -256,7 +256,7 @@ class HistoryArchive:
         finally:
             connection.close()
 
-    def query(self, query, limit=12, max_chars=6000, paths=None):
+    def query(self, query, limit=12, max_chars=10000, paths=None):
         if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1000 <= max_chars <= 50000:
             raise FrameworkError('历史显示预算须为1000至50000字符')
         collected = self.collect(query, limit, paths)
@@ -279,7 +279,7 @@ class HistoryArchive:
             raise FrameworkError('历史检索元信息超出预算')
         return result
 
-    def read(self, path, legacy_id, source_sha256, offset=0, max_chars=6000, source_format=None):
+    def read(self, path, legacy_id, source_sha256, offset=0, max_chars=10000, source_format=None):
         if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
             raise FrameworkError('分页偏移须为非负整数')
         if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1000 <= max_chars <= 50000:
@@ -349,7 +349,7 @@ class HistoryArchive:
         return {**match,'path':path,'source_sha256':checksum,'source_format':format,'authority':'historical_reference'}
 
 
-def session_context(store, output_prefix=None, query=None, max_chars=6000):
+def session_context(store, output_prefix=None, query=None, max_chars=10000):
     """共同接手入口，保留原参数与调用位置。"""
     from .session import context
     return context(store,output_prefix=output_prefix,query=query,max_chars=max_chars)

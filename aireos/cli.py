@@ -110,7 +110,7 @@ def _dispatch(args, params):
             if command=='history-read':
                 from .reading import record
                 arguments=dict(params)
-                arguments['max_chars']=max(1000,arguments.get('max_chars',6000)-180)
+                arguments['max_chars']=max(1000,arguments.get('max_chars',10000)-180)
                 return record(store,'session',_call(method,arguments))
             return _call(method, params)
         project = Project(args.project, token)

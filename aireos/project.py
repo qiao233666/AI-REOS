@@ -59,7 +59,7 @@ class Project:
             return tx.create("task", {"contract": pinned, "status": "planned", "submitted": []})
         return self.store.mutate("task.create", contract, request_id, "plan", apply)
 
-    def prepare(self, task_id, query, request_id, limit=12, max_chars=12000, view="brief"):
+    def prepare(self, task_id, query, request_id, limit=12, max_chars=10000, view="brief"):
         text_required(query, "检索问题")
         if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1000 <= max_chars <= 50000:
             raise FrameworkError("上下文显示预算必须为1000至50000字符")

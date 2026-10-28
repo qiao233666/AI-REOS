@@ -9,6 +9,17 @@ from aireos.history import HistoryArchive
 class HistoryExtensionTests(unittest.TestCase):
     setUp = workflow.WorkflowTests.setUp
 
+    def test_default_read_page_uses_ten_thousand_character_packet(self):
+        (self.root/'history').mkdir()
+        (self.root/'history/large.md').write_text('目标 '+ '完整原文'*4000,encoding='utf-8')
+        archive=HistoryArchive(self.owner.store)
+        archive.configure([dict(path='history/large.md',format='document')],'large-config')
+        hit=archive.collect('目标')['matches'][0]
+        page=archive.read('history/large.md','DOC-1',hit['source_sha256'])
+        self.assertGreater(len(json.dumps(page,ensure_ascii=False)),9000)
+        self.assertLessEqual(len(json.dumps(page,ensure_ascii=False)),10000)
+        self.assertIsNotNone(page['next_offset'])
+
     def test_document_snapshot_pagination_and_paths(self):
         folder = self.root / 'history'
         folder.mkdir()
