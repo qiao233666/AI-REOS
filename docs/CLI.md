@@ -46,6 +46,8 @@ python -m aireos --project ROOT [--credential-file KEY] COMMAND [--input FILE] [
 
 ## 0.2的固定组合入口
 
+任务接续卡另见本页末尾的alpha.5说明；它不是正式交付或审核。
+
 - `deliver-batch`（execute）：`task_id, artifacts, claims, query?, leases?`。每项需唯一key；文件项含path/title，主张项含title/text/classification/scope/supports。supports可引用本批前面项的key。程序准备上下文、启动待执行任务、登记快照、登记主张并提交全部主张和文件；不采纳。一次最多64项。
 - `record-reviews`（review）：`task_id,reviews`，每条含`item_id,revision,verdict,method,checks`。revision必须是实际核查的版本。程序只登记意见，不产生审核判断。
 - `finalize-task`（decide；publish为true时还需publish能力）：`task_id,adoptions,summary,publish?`。adoptions逐项指定item_id/review_id；可空表示没有成果获采纳。程序逐项验证采纳、结案和发表手账。每项交付必须先有质量意见；unknown/fail也能如实结案。
@@ -92,3 +94,15 @@ python -m aireos --project ROOT [--credential-file KEY] COMMAND [--input FILE] [
 完整适用范围见[操作协议](PROTOCOLS.md)与[本轮兼容说明](REVIEW_0_4_0.md)。
 
 `pause-case`（decide）：`{"case_id":"<案件ID>","reason":"本轮为何保留未知并暂停"}`。这是明确停止本轮投入的管理动作，保持unresolved、原目标及已用次数；不等同核查或通过，也不补额度。升级前已用完额度但只留下旧格式意见的open案件也可这样停下，再有新信息时申请续查。
+
+## alpha.5 有界任务接续
+
+`checkpoint`（execute能力）输入如下。第一次expected_revision为0，后续填写读到的卡revision（不是任务rev）。每次替换整张当前卡；pending默认空文本，references默认空数组。卡完整JSON最多1500字符（含定位与元信息）、最多8个文件或交付项引用，单文件沿用32MiB输入上限。中途文件只记录路径、SHA256和长度，不额外复制材料；已登记交付项绑定对象版本。引用作为reference，不改任务输入或赋予依据资格。文件后来变化或丢失时提示；要恢复旧文件内容，应使用正式交付的快照或项目自己的版本保存，不把卡的摘要冒充字节备份。
+
+```json
+{"task_id":"TASK-实际编号","expected_revision":0,"progress":"正常样例已验证","references":[{"type":"file","path":"outputs/checks.txt"}],"pending":"异常样例尚未核查","next_step":"验证参数缺失的处理"}
+```
+
+调用方式：`python -B -m aireos --project ROOT --credential-file KEY checkpoint --input checkpoint.json --request-id 本次请求身份`。交接前及关键变化时更新即可；重复同请求不重复写，无变化不增加卡版本。已结束任务拒写；其他执行者更新后旧卡版本拒写，接手须另行确认旧执行已停止及输出接管。
+
+只读 `task-checkpoint` 输入 `{"task_id":"TASK-实际编号"}`，返回当前卡及材料变化提示；无卡返回null，不编造进展。`session-context`可传task_id（或output_prefix缩小范围）：唯一活跃任务或明确选择时只展开一张卡，旧卡不进知识索引；卡计入原有整包预算，省略时明确标记和定位。停止/结案后导航不再包含它，但get任务的准确revision仍能恢复当时卡。

@@ -10,9 +10,10 @@ from .project import Project
 from .storage import Store
 
 
-READ_ONLY = {"get", "list", "events", "status", "check-receipt", "trace", "views-status", "memory-query", "run-evidence",
+READ_ONLY = {"get", "list", "events", "status", "check-receipt", "trace", "views-status", "memory-query", "run-evidence", "task-checkpoint",
     "history-query", "history-get", "history-read", "session-context", "reading-usage"}
 PROJECT_COMMANDS = {
+    "checkpoint": "checkpoint",
     "create-task": "create_task",
     "prepare": "prepare",
     "start-task": "start_task",
@@ -114,6 +115,8 @@ def _dispatch(args, params):
                 return record(store,'session',_call(method,arguments))
             return _call(method, params)
         project = Project(args.project, token)
+        if command == 'task-checkpoint':
+            return _call(project.task_checkpoint, params)
         if command == "status":
             return _call(project.status, params)
         if command == "check-receipt":
@@ -152,6 +155,7 @@ def _dispatch(args, params):
         return _call(method, params, args.request_id)
     if command in PROJECT_COMMANDS:
         project_methods = {
+            "checkpoint": project.checkpoint,
             "create-task": project.create_task,
             "prepare": project.prepare,
             "start-task": project.start_task,

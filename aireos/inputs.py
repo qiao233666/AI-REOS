@@ -29,7 +29,7 @@ def file_bytes(root, path):
         raise FrameworkError("任务输入文件不可读取") from exc
 
 
-def bind(tx, entries):
+def bind(tx, entries, save_snapshots=True):
     result = []
     for entry in entries:
         entry = {"type": "file", "path": entry} if isinstance(entry, str) else entry
@@ -41,7 +41,10 @@ def bind(tx, entries):
             raise FrameworkError("输入用途须为basis依据或reference待研究材料")
         if kind == "file":
             relative, content = file_bytes(tx.store.root, entry.get("path"))
-            checksum = tx.store.snapshot(content)
+            if save_snapshots:
+                checksum = tx.store.snapshot(content)
+            else:
+                checksum = hashlib.sha256(content).hexdigest()
             if entry.get("sha256", checksum) != checksum:
                 raise FrameworkError("声明的输入摘要与实际文件不符")
             result.append(dict(type="file", path=relative, declared_path=entry["path"], sha256=checksum, bytes=len(content), usage=usage))
@@ -76,7 +79,7 @@ def objects(tx, entries, basis_only=False):
     return list(found.values())
 
 
-def validate(tx, entries):
+def validate(tx, entries, verify_snapshots=True):
     reasons = []
     for entry in entries:
         if not isinstance(entry, dict):
@@ -87,7 +90,8 @@ def validate(tx, entries):
                 path, content = file_bytes(tx.store.root, entry["declared_path"])
                 if path != entry["path"] or hashlib.sha256(content).hexdigest() != entry["sha256"]:
                     reasons.append("声明输入的实际内容或路径变化: " + entry["path"])
-                tx.store.blob(entry["sha256"])
+                if verify_snapshots:
+                    tx.store.blob(entry["sha256"])
             elif entry["type"] == "item":
                 obj = tx.get(entry["id"])
                 if obj["rev"] != entry["rev"] or digest(obj["data"]) != entry["digest"]:

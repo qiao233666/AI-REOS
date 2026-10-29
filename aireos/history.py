@@ -349,7 +349,7 @@ class HistoryArchive:
         return {**match,'path':path,'source_sha256':checksum,'source_format':format,'authority':'historical_reference'}
 
 
-def session_context(store, output_prefix=None, query=None, max_chars=10000):
+def session_context(store, output_prefix=None, query=None, max_chars=10000, task_id=None):
     """共同接手入口，保留原参数与调用位置。"""
     from .session import context
-    return context(store,output_prefix=output_prefix,query=query,max_chars=max_chars)
+    return context(store,output_prefix=output_prefix,query=query,max_chars=max_chars,task_id=task_id)

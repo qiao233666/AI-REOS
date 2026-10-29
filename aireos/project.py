@@ -30,6 +30,14 @@ class Project:
     def __init__(self, root, token=None):
         self.store = Store(root, token)
 
+    def checkpoint(self, task_id, progress, next_step, expected_revision, request_id, pending='', references=None):
+        from .checkpoints import save
+        return save(self, task_id, progress, next_step, expected_revision, request_id, pending, references)
+
+    def task_checkpoint(self, task_id):
+        from .checkpoints import read
+        return read(self, task_id)
+
     def create_task(self, title, objective, acceptance, outputs, request_id, inputs=None, budget=None, stop_conditions=None, recall_mode="incremental"):
         text_required(title, "任务标题")
         text_required(objective, "任务目标")
