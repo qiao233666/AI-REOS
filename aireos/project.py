@@ -67,40 +67,51 @@ class Project:
             return tx.create("task", {"contract": pinned, "status": "planned", "submitted": []})
         return self.store.mutate("task.create", contract, request_id, "plan", apply)
 
-    def prepare(self, task_id, query, request_id, limit=12, max_chars=10000, view="brief"):
+    def prepare(self, task_id, query, request_id, limit=12, max_chars=10000, view="brief", working_items=None):
         text_required(query, "检索问题")
         if isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1000 <= max_chars <= 50000:
             raise FrameworkError("上下文显示预算必须为1000至50000字符")
         def apply(tx):
             task = typed(tx, task_id, "task")
+            from .source_scope import live_sources
+            actual = live_sources(tx,task,working_items)
             from . import prework
             from .inputs import objects as input_objects
             seeds = input_objects(tx, task["data"]["contract"].get("inputs", []))
-            seeds.extend(obj for obj in tx.list("item") if obj["data"]["task"] == task_id)
+            seeds.extend(tx.get(ref['id'],ref['rev']) for ref in actual['live_refs'])
             result = recall.search(tx, query, limit, seeds=seeds)
             objects = {obj["id"]: obj for obj in result["matches"]}
             legacy = prework.capture(self.store, tx, query, limit, task['data']['contract']['outputs'],
                 [ref for obj in objects.values() if obj['kind']=='memory_note' for ref in obj['data']['sources']])
             receipt = tx.create("receipt", {"project": self.store.project_id(tx.connection),
-                "receipt_version": 2, "watermark": tx.connection.execute("SELECT COALESCE(MAX(rowid),0) FROM versions").fetchone()[0],
+                "receipt_version": 3, "watermark": tx.connection.execute("SELECT COALESCE(MAX(rowid),0) FROM versions").fetchone()[0],
                 "task": task_id, "contract": recall.contract_hash(task), "epoch": self.store.epoch(tx.connection),
                 "query": query, "refs": [recall.reference(obj) for obj in objects.values()],
                 "historical": [recall.reference(obj) for obj in result["historical"]],
                 "truncated": result["truncated"], "coverage": result["coverage"],
-                "history_check": legacy['check']})
+                "history_check": legacy['check'], **actual})
             from .memory_packet import present
             display = present(tx, list(objects.values()), result["historical"], query,
                 max(1000,max_chars//2) if legacy['configured'] else max_chars, view)
             response = {**receipt, **{key: value for key, value in display.items() if key != "current"},
                 "context": display["current"], "retrieval": result["retrieval"],
                 "retrieval_note": "片段不改写原文，source给出正文字符位置。收据绑定完整版本；未显示内容按data.refs中的id/rev用get补取。状态表示当前复用条件，不证明已读完或科学正确。"}
+            checked=recall.check(tx,receipt['id'],task_id)
+            response['freshness']=dict(valid=checked['valid'],reasons=checked['reasons'][:3],
+                blockers=len(checked['reasons']),warnings=checked['warnings'][:3],
+                warning_details_truncated=checked['warnings_truncated'] or len(checked['warnings'])>3,
+                details='check-receipt '+receipt['id'])
+            response['source_policy']='检索候选按历史快照参考；显式任务输入及实际工作目标的live_refs须核对现场版本。历史命中不授予采纳资格。'
             if legacy['configured'] or legacy['constraints']:
                 response['history']=prework.packet(legacy,query,max(1000,max_chars//2))
                 response['constraints']=legacy['constraints']
-                return prework.fit_prepare(response,max(1000,max_chars-180))
-            return response
+            display_budget=max(600,max_chars-180) if 'history' in response else max_chars
+            return prework.fit_prepare(response,display_budget)
         # 任一登记角色均可检索；不把读资料当作决策权限。
-        response=self.store.mutate("context.prepare", dict(task=task_id, query=query, limit=limit, max_chars=max_chars, view=view), request_id, None, apply)
+        payload=dict(task=task_id, query=query, limit=limit, max_chars=max_chars, view=view)
+        if working_items is not None:
+            payload['working_items']=working_items
+        response=self.store.mutate("context.prepare", payload, request_id, None, apply)
         if 'history' in response:
             from .reading import record
             response=record(self.store,'task:'+task_id,response)
@@ -222,6 +233,8 @@ class Project:
                 if item["data"]["task"] != task_id:
                     raise FrameworkError("不能交付其他任务的产物")
                 refs.append(recall.reference(item))
+            from .source_scope import require_coverage
+            require_coverage(tx,receipt_id,task,items)
             from .coordination import check_leases
             check_leases(tx, task_id, leases or [])
             return tx.replace(task_id, task["rev"], {**task["data"], "status": "delivered", "submitted": refs,
@@ -349,6 +362,8 @@ class Project:
             ref = recall.reference(item)
             if task["data"]["status"] != "delivered" or ref not in task["data"]["submitted"]:
                 raise FrameworkError("只能采纳已交付的具体版本")
+            from .source_scope import require_coverage
+            require_coverage(tx,receipt_id,task,[item_id])
             review = typed(tx, review_id, "review")
             if review["data"]["target"] != ref or review["data"]["verdict"] != "pass" or not explicit_review(review):
                 raise FrameworkError("审核未明确通过当前产物版本")

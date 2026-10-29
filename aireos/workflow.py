@@ -87,7 +87,7 @@ class Workflow:
         task = self._recorded(flow, request_id, "submit")
         if task is None:
             packet_key = self._request(request_id, "submit-context:" + str(self.store.epoch()))
-            packet = self.project.prepare(task_id, query, packet_key)
+            packet = self.project.prepare(task_id, query, packet_key, working_items=[obj['id'] for obj in submitted])
             task = self.project.submit(task_id, [obj["id"] for obj in submitted], packet["id"], self._request(request_id, "submit"), leases=leases)
         self._step(flow["id"], "submit", task, request_id, "execute")
         return self._finish(flow, dict(task=task_id, items=submitted, artifacts=files), request_id, "execute")
@@ -131,7 +131,7 @@ class Workflow:
             obj = self._recorded(flow, request_id, step)
             if obj is None:
                 task = self.store.get(task_id)
-                packet = self.project.prepare(task_id, task["data"]["contract"]["title"], self._request(request_id, step + ":context:" + str(self.store.epoch())))
+                packet = self.project.prepare(task_id, task["data"]["contract"]["title"], self._request(request_id, step + ":context:" + str(self.store.epoch())),working_items=[item['id']])
                 obj = self.project.adopt(item["id"], entry["review_id"], packet["id"], self._request(request_id, step))
             self._step(flow["id"], step, obj, request_id, "decide")
         closed = self.project.close_task(task_id, summary, self._request(request_id, "close"))

@@ -143,6 +143,7 @@ def validate(tx,old,query):
 def fit_prepare(value,max_chars):
     """历史检查的长凭据存在本地；给模型的完整JSON另按硬预算裁切。"""
     result=copy.deepcopy(value)
+    metadata_compacted=False
     # 完整收据可由get恢复；其内部来源目录不重复注入模型。
     if 'history_check' in result.get('data',{}):
         data=result['data']
@@ -166,7 +167,7 @@ def fit_prepare(value,max_chars):
                 source['end']=source['start']+len(entry[field])
             continue
         data=result.get('data',{})
-        if data.get('refs'):
+        if len(data.get('refs',[]))>1:
             data['refs_omitted']=data.get('refs_omitted',0)+len(data['refs'])
             data['refs']=[]
             result['receipt_details']='get '+result['id']
@@ -174,8 +175,37 @@ def fit_prepare(value,max_chars):
         if data.get('historical'):
             data['historical']=[]; data['historical_omitted']=True
             continue
+        directory=next((key for key in ('live_refs','working_items') if data.get(key)),None)
+        if directory:
+            data[directory+'_omitted']=len(data[directory])
+            data[directory]=[]
+            result['receipt_details']='get '+result['id']
+            continue
+        freshness=result.get('freshness',{})
+        if freshness.get('warnings') or freshness.get('reasons'):
+            freshness['warnings']=[]; freshness['reasons']=[]
+            freshness['details_omitted']=True
+            continue
         if 'retrieval' in result:
             result.pop('retrieval'); result['retrieval_details']='get '+result['id']
+            continue
+        if not metadata_compacted:
+            for key in ('project','contract','watermark','epoch','query','coverage','history_check_summary'):
+                data.pop(key,None)
+            for key in ('retrieval_note','source_policy','created','sequence','view','retrieval_details','kind'):
+                result.pop(key,None)
+            for key in ('historical','live_refs','working_items','live_refs_omitted','working_items_omitted'):
+                data.pop(key,None)
+            metadata_compacted=True
+            result['receipt_details']='get '+result['id']
+            continue
+        if any(not state.get('details_omitted') for state in result.get('reuse_status',{}).values()):
+            result['reuse_status']={identifier:dict(status=state['status'],details_omitted=True)
+                                    for identifier,state in result['reuse_status'].items()}
+            continue
+        if freshness and not freshness.get('compact'):
+            result['freshness']=dict(valid=freshness['valid'],blockers=freshness['blockers'],
+                details_omitted=True,compact=True)
             continue
         history=result.get('history',{})
         arrays=[result.get('context',[]),result.get('historical',[]),history.get('matches',[])]
@@ -188,5 +218,12 @@ def fit_prepare(value,max_chars):
                 result['reuse_status']={key:state for key,state in result.get('reuse_status',{}).items() if key in visible}
             history['display_truncated']=True
             continue
+        if data.get('refs'):
+            data['refs_omitted']=len(data['refs']);data['refs']=[]
+            continue
         raise FrameworkError('开工元信息超出预算，请提高预算或缩小明确约束')
+    from .storage import canonical
+    states=result.get('reuse_status',{})
+    result['display_chars']=sum(len(canonical(entry))+(len(canonical({entry['id']:states[entry['id']]}))
+        if entry['id'] in states else 0) for entry in result.get('context',[])+result.get('historical',[]))
     return result

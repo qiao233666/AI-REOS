@@ -121,15 +121,38 @@ def check(tx, receipt_id, task_id=None):
                     warnings.append({"id": row["id"], "rev": row["rev"], "note": "新增内容可能相关；尚未证明与当前判断存在冲突，可按需补取"})
     if data["truncated"]:
         reasons.append("检索结果超出本次范围，须细化查询")
-    for ref in data["refs"]:
+    scoped = data.get('receipt_version',1)>=3
+    if scoped and not isinstance(data.get('live_refs'),list):
+        reasons.append('新收据缺少实际来源目录，需要重新prepare')
+    live = data.get('live_refs',[]) if scoped else data['refs']
+    live_keys={(ref['id'],ref['rev']) for ref in live}
+    combined={(ref['id'],ref['rev']):ref for ref in data['refs']+live}
+    for key,ref in combined.items():
         obj = tx.get(ref["id"])
         if reference(obj) != ref:
             reasons.append("所用记录版本变化: " + ref["id"])
+        frozen=tx.get(ref['id'],ref['rev'])
+        if frozen['data'].get('type')=='artifact':
+            try:
+                tx.store.blob(frozen['data']['blob'])
+            except FrameworkError:
+                reasons.append('历史文件快照损坏或缺失: '+ref['id'])
+                continue
         if source_state(tx.store, obj) is False:
-            reasons.append("实际文件变化或快照损坏: " + ref["id"])
+            if key in live_keys:
+                reasons.append("实际文件变化或快照损坏: " + ref["id"])
+            else:
+                warnings.append(dict(id=ref['id'],rev=ref['rev'],type='historical_source_changed',
+                    note='历史快照完整，现场文件已变化；仅作历史参考，不自动作为本次依据。'))
     for ref in data.get("historical", []):
-        if reference(tx.get(ref["id"], ref["rev"])) != ref:
+        frozen=tx.get(ref["id"], ref["rev"])
+        if reference(frozen) != ref:
             reasons.append("历史版本损坏: " + ref["id"])
+        if frozen['data'].get('type')=='artifact':
+            try:
+                tx.store.blob(frozen['data']['blob'])
+            except FrameworkError:
+                reasons.append('历史文件快照损坏或缺失: '+ref['id'])
     return {"valid": not reasons, "reasons": list(dict.fromkeys(reasons)), "receipt": receipt_id,
             "delta_checked": delta_checked, "warnings": warnings[:12], "warnings_truncated": len(warnings) > 12,
             "coverage": data["coverage"]}

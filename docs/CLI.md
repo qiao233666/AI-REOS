@@ -106,3 +106,11 @@ python -m aireos --project ROOT [--credential-file KEY] COMMAND [--input FILE] [
 调用方式：`python -B -m aireos --project ROOT --credential-file KEY checkpoint --input checkpoint.json --request-id 本次请求身份`。交接前及关键变化时更新即可；重复同请求不重复写，无变化不增加卡版本。已结束任务拒写；其他执行者更新后旧卡版本拒写，接手须另行确认旧执行已停止及输出接管。
 
 只读 `task-checkpoint` 输入 `{"task_id":"TASK-实际编号"}`，返回当前卡及材料变化提示；无卡返回null，不编造进展。`session-context`可传task_id（或output_prefix缩小范围）：唯一活跃任务或明确选择时只展开一张卡，旧卡不进知识索引；卡计入原有整包预算，省略时明确标记和定位。停止/结案后导航不再包含它，但get任务的准确revision仍能恢复当时卡。
+
+## alpha.6 历史参考与实际来源
+
+新prepare保存receipt_version=3：refs是检索及显式关联的阅读记录，live_refs只绑定显式任务输入和本次实际目标沿supports的正向依据链。历史artifact的快照完好、但现场同路径文件后来变化时，check-receipt返回historical_source_changed提示，不再仅因此拒绝开工；旧记录状态仍可能是needs_review，不能自动复用为新结论。快照损坏、所读对象版本或明确更正变化仍会拒绝旧收据。
+
+prepare增加可选working_items数组，填写本任务实际待交付或采纳的item身份。默认保守选择本任务所有当前登记项，兼容旧直接调用；存在旧候选或重新交付时可明确选择新版。deliver-batch自动填写本批目标，finalize-task逐项填写采纳目标。空数组不绕过固定任务输入；submit/adopt都会核对实际目标及递归依据已被收据绑定，漏绑须重新prepare。依据链循环、缺失、版本冲突或超过200项不静默截断。
+
+显式任务inputs中的usage=reference仍是有版本的任务输入，不因属于参考用途就允许字节悄悄变化；它与自动召回的历史候选不同。prepare的freshness显示当次有效性、阻塞与提示；目录或元信息过长时按预算省略并给出get/check-receipt定位，完整内容仍保存在数据库。旧v1/v2收据保持旧判定，同请求重放返回原收据；修改目标选择使用新请求身份，不能猜补旧审核或用新语义自动解冻旧任务。
