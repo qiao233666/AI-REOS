@@ -354,6 +354,11 @@ class Project:
         with self.store.connection() as connection:
             return self._status(Transaction(self.store, connection, {}), item_id)
 
+    def check_finalize(self, task_id, adoptions, max_chars=10000, offset=0):
+        from .readiness import collect, packet
+        with self.store.connection() as connection:
+            return packet(collect(Transaction(self.store, connection, {}), task_id, adoptions), max_chars, offset)
+
     def adopt(self, item_id, review_id, receipt_id, request_id):
         def apply(tx):
             item = typed(tx, item_id, "item")

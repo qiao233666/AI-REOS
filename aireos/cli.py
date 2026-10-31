@@ -10,7 +10,7 @@ from .project import Project
 from .storage import Store
 
 
-READ_ONLY = {"get", "list", "events", "status", "check-receipt", "trace", "views-status", "memory-query", "run-evidence", "task-checkpoint",
+READ_ONLY = {"get", "list", "events", "status", "check-receipt", "check-finalize", "trace", "views-status", "memory-query", "run-evidence", "task-checkpoint",
     "history-query", "history-get", "history-read", "session-context", "reading-usage"}
 PROJECT_COMMANDS = {
     "checkpoint": "checkpoint",
@@ -121,6 +121,8 @@ def _dispatch(args, params):
             return _call(project.status, params)
         if command == "check-receipt":
             return _call(project.check_receipt, params)
+        if command == "check-finalize":
+            return _call(project.check_finalize, params)
         if command == "memory-query":
             from .semantic import MemoryService
             return _call(MemoryService(store).query, params)

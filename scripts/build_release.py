@@ -53,7 +53,7 @@ def build(root,output,tag,validation=None):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',required=True,type=Path)
-    parser.add_argument('--tag',default='v2.0.0-alpha.6')
+    parser.add_argument('--tag',default='v2.0.0-alpha.7')
     parser.add_argument('--validation',type=Path)
     args=parser.parse_args()
     manifest=build(Path(__file__).resolve().parents[1],args.output,args.tag,args.validation)

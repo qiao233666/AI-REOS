@@ -21,6 +21,9 @@ class Workflow:
             self.project._scope_task(tx, task_id)
             if publish:
                 self.store._principal(tx.connection, "publish")
+            if kind == "finalize":
+                from .readiness import collect, require_ready
+                require_ready(collect(tx, task_id, spec["adoptions"]))
             return tx.create("workflow", dict(type=kind, task=task_id, status="running", steps={}, spec_digest=digest(spec), actor=tx.principal["actor"]))
         return self.store.mutate("workflow." + kind, dict(task=task_id, spec=spec), request_id, capability, apply)
 

@@ -48,6 +48,10 @@ python -m aireos --project ROOT [--credential-file KEY] COMMAND [--input FILE] [
 
 任务接续卡另见本页末尾的alpha.5说明；它不是正式交付或审核。
 
+`check-finalize`是alpha.7新增的只读诊断，输入`{"task_id":"<任务编号>","adoptions":[{"item_id":"<交付项>","review_id":"<审核意见>"}],"max_chars":10000,"offset":0}`，不接受request-id、不需要写凭据。返回ready、blockers及issues；超过整包预算时next_offset给下一页，blockers始终是全部阻塞数。它核对可确定的结案及采纳条件，不代替正式动作中的权限、收据、占用和并发变化检查。ready不表示科学正确或授予采纳。
+
+新的finalize请求发现预检阻塞时不创建流程；条件修正后可用原请求继续。已经登记或部分执行的请求仍按原身份和原内容恢复。不得通过反复换request-id、清除旧快照或重新prepare来接受已经变化的固定输入。持续追加的SUMMARY/进度文件应另存冻结版本作为输入，中途状态使用checkpoint。
+
 - `deliver-batch`（execute）：`task_id, artifacts, claims, query?, leases?`。每项需唯一key；文件项含path/title，主张项含title/text/classification/scope/supports。supports可引用本批前面项的key。程序准备上下文、启动待执行任务、登记快照、登记主张并提交全部主张和文件；不采纳。一次最多64项。
 - `record-reviews`（review）：`task_id,reviews`，每条含`item_id,revision,verdict,method,checks`。revision必须是实际核查的版本。程序只登记意见，不产生审核判断。
 - `finalize-task`（decide；publish为true时还需publish能力）：`task_id,adoptions,summary,publish?`。adoptions逐项指定item_id/review_id；可空表示没有成果获采纳。程序逐项验证采纳、结案和发表手账。每项交付必须先有质量意见；unknown/fail也能如实结案。
