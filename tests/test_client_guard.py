@@ -106,7 +106,7 @@ class ClientGuardTests(unittest.TestCase):
         self.event('UserPromptSubmit', prompt='历史原文')
         self.assertEqual(2, self.event('PreToolUse', tool_name='Read', tool_input={})[0])
         entry = (self.root/'aiops/aireos/run.py').as_posix()
-        recovery = f'python -X utf8 "{entry}" client-context --input query.json'
+        recovery = f'"{sys.executable}" -X utf8 "{entry}" client-context --input query.json'
         emitted=self.guard.context_text(self.root).split('恢复入口：',1)[1].split(' --input',1)[0]+' --input query.json'
         self.assertEqual(0,self.event('PreToolUse',tool_name='Bash',tool_input={'command':emitted})[0])
         self.assertEqual(0, self.event('PreToolUse', tool_name='Bash', tool_input={'command':recovery})[0])
