@@ -107,13 +107,24 @@ class ClientGuardTests(unittest.TestCase):
         self.assertEqual(2, self.event('PreToolUse', tool_name='Read', tool_input={})[0])
         entry = (self.root/'aiops/aireos/run.py').as_posix()
         recovery = f'python -X utf8 "{entry}" client-context --input query.json'
-        self.assertIn(entry, self.guard.context_text(self.root))
+        emitted=self.guard.context_text(self.root).split('恢复入口：',1)[1].split(' --input',1)[0]+' --input query.json'
+        self.assertEqual(0,self.event('PreToolUse',tool_name='Bash',tool_input={'command':emitted})[0])
         self.assertEqual(0, self.event('PreToolUse', tool_name='Bash', tool_input={'command':recovery})[0])
         for command in [f'echo {recovery}', recovery+'; cat old.md', 'python other.py client-context', 'pwd; rg result .']:
             self.assertEqual(2, self.event('PreToolUse', tool_name='Bash', tool_input={'command':command})[0], command)
         legacy.write_text('## F-001\n历史原文\n', encoding='utf-8')
         self.guard.retrieve(self.root, 'one', '历史原文')
         self.assertEqual(0, self.event('PreToolUse', tool_name='Read', tool_input={})[0])
+
+    def test_emitted_recovery_command_runs_for_project_path_with_spaces(self):
+        other=self.root.parent/'project with spaces'
+        Store.initialize(other)
+        folder=other/'aiops/aireos'; folder.mkdir(parents=True)
+        (folder/'retrieval-policy.json').write_text(json.dumps(self.policy),encoding='utf-8')
+        self.guard.begin(other,'one','question')
+        emitted=self.guard.context_text(other).split('恢复入口：',1)[1].split(' --input',1)[0]+' --input query.json'
+        code,_,reason=self.guard.handle(other,'PreToolUse',dict(session_id='one',tool_name='Bash',tool_input={'command':emitted}))
+        self.assertEqual(0,code,reason)
 
     def test_project_isolation_and_session_reset(self):
         self.event('UserPromptSubmit', prompt='project one')
