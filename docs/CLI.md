@@ -19,6 +19,7 @@ python -m aireos --project ROOT [--credential-file KEY] COMMAND [--input FILE] [
 - `get`：参数如 `{"identifier":"item-...","revision":1}`。
 - `list`：可选 `{"kind":"item"}`。
 - `events`：不需要输入参数。
+- `event-feed`：未发布增量；参数、游标及预算见本页末尾，不改变 `events` 的原有返回形状。
 - `status`：`{"item_id":"item-..."}`。
 - `check-receipt`：`{"receipt_id":"receipt-..."}`。
 - `trace`：`{"stage_id":"stage-..."}`。
@@ -118,3 +119,20 @@ python -m aireos --project ROOT [--credential-file KEY] COMMAND [--input FILE] [
 prepare增加可选working_items数组，填写本任务实际待交付或采纳的item身份。默认保守选择本任务所有当前登记项，兼容旧直接调用；存在旧候选或重新交付时可明确选择新版。deliver-batch自动填写本批目标，finalize-task逐项填写采纳目标。空数组不绕过固定任务输入；submit/adopt都会核对实际目标及递归依据已被收据绑定，漏绑须重新prepare。依据链循环、缺失、版本冲突或超过200项不静默截断。
 
 显式任务inputs中的usage=reference仍是有版本的任务输入，不因属于参考用途就允许字节悄悄变化；它与自动召回的历史候选不同。prepare的freshness显示当次有效性、阻塞与提示；目录或元信息过长时按预算省略并给出get/check-receipt定位，完整内容仍保存在数据库。旧v1/v2收据保持旧判定，同请求重放返回原收据；修改目标选择使用新请求身份，不能猜补旧审核或用新语义自动解冻旧任务。
+
+## 未发布：待决请求与新事件
+
+这些接口复用现有数据库和凭据，不自动升级已锁定项目；用途及与原有能力的对应关系见 [适配说明](SUPERAGENT_ADOPTION.md)。
+
+- `request-decision`：`{"task_id":"TASK-实际编号","key":"delivery-choice","question":"本轮采用哪种交付方式？","context":"两种方案的结果与代价见任务产物"}`。须有 plan、execute、review 或 decide 中的至少一种能力，且具有任务输出范围。需要 request-id。key 最多100字符，问题最多2000字符、context 最多4000字符；每任务最多8项同时待决。同任务同 key 相同内容复用已有记录，不同内容拒绝；已答复的问题不会自动重开。
+- `resolve-decision`：`{"decision_id":"DECISION_REQUEST-实际编号","expected_revision":1,"answer":"采用已授权范围内的第一种方式","resolution":"answered"}`。需要 decide 能力、任务范围和 request-id；resolution 可为 answered（默认）或 withdrawn，后者的 answer 写明撤销理由。填写实际读到的请求版本，避免迟到答复覆盖他人的处理。
+- `task-attention`：`{"task_id":"TASK-实际编号","max_chars":10000,"offset":0}`。只读，不需要凭据或 request-id。pending_count 始终给出全部未决数量，requests 给当前页及准确对象版本；next_offset 非空时须继续读取，下一页同时传 `offset=next_offset` 和 `expected_snapshot=首包snapshot`。未决集合发生变化时拒绝旧分页，须从0重新读取，防止并发答复导致条目左移后被跳过。问题正文超出小预算时明确报错，请提高预算。
+- `event-feed`：`{"after_seq":0,"limit":50,"max_chars":10000}`。只读，不需要凭据或 request-id。limit 为1至100，max_chars 为1000至50000。返回 project_id、high_watermark、events、next_after_seq、has_more；保存同一项目的游标，下次把 next_after_seq 作为 after_seq。摘要不含原始输入正文，变更对象引用若省略会标记 changes_truncated；详细版本按 id/rev 用 get 展开，原 events 继续提供完整审计记录。
+
+待决请求不暂停任务内其余已授权工作；普通进度、checkpoint 或新会话不会代替明确答复。check-finalize 和实际 close-task 都检查未决项；无法处理时仍可用 stop-task 如实停止，保留未决。答复不自动改变合同、输入或预算，不恢复已停止任务，不代表科学审核或正式采纳。
+
+event-feed 不创建收据或新事件，也不常驻监听、唤醒模型或外发通知。游标只推进本批实际返回的事件，新增事件留给后续读取；after_seq 超出本项目高水位时应核对项目和游标，不靠跳过未知历史继续。
+
+## 客户端检索前置（alpha.8）
+
+只读命令`client-context`输入`{"query":"本轮具体问题","session_id":"宿主当前会话id"}`，仅在已建立本轮状态后执行真实联查并写运行缓存；不产生正式prepare收据。`client-guard-status`输入`{"session_id":"当前会话id"}`读取本轮状态；`client-adapter-check`无输入检查已启用适配。详见[接入及边界](CLIENT_RETRIEVAL_GUARD.md)。

@@ -194,6 +194,46 @@ class Store:
         with self.connection() as connection:
             return [{**dict(row), "payload": json.loads(row["payload"])} for row in connection.execute("SELECT * FROM events ORDER BY seq")]
 
+    def event_feed(self, after_seq=0, limit=50, max_chars=10000):
+        """在同一读取快照内给出有界摘要；只推进返回过的事件。"""
+        if (isinstance(after_seq, bool) or not isinstance(after_seq, int) or after_seq < 0
+                or isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 100
+                or isinstance(max_chars, bool) or not isinstance(max_chars, int) or not 1000 <= max_chars <= 50000):
+            raise FrameworkError('事件游标须为非负整数，limit须为1至100，预算须为1000至50000字符')
+        with self.connection() as connection:
+            high = connection.execute('SELECT COALESCE(MAX(seq),0) FROM events').fetchone()[0]
+            if after_seq > high:
+                raise FrameworkError('事件游标超出本项目当前高水位；请核对project_id及游标来源')
+            result = dict(project_id=self.project_id(connection), high_watermark=high, events=[],
+                          next_after_seq=after_seq, has_more=after_seq < high)
+            rows = connection.execute('SELECT * FROM events WHERE seq>? AND seq<=? ORDER BY seq LIMIT ?',
+                                      (after_seq, high, limit))
+            for row in rows:
+                changes = json.loads(row['payload'])['changes']
+                event = {key: row[key] for key in ('seq', 'action', 'actor', 'created')}
+                event.update(changes=[{key: change[key] for key in ('id', 'rev', 'digest')}
+                                      for change in changes],
+                             changed_count=len(changes), changes_truncated=False)
+                previous_cursor = result['next_after_seq']
+                result['events'].append(event)
+                result['next_after_seq'] = row['seq']
+                result['has_more'] = row['seq'] < high
+                while len(json.dumps(result, ensure_ascii=False)) > max_chars and event['changes']:
+                    event['changes'].pop()
+                    event['changes_truncated'] = True
+                if len(json.dumps(result, ensure_ascii=False)) > max_chars:
+                    result['events'].pop()
+                    result['next_after_seq'] = previous_cursor
+                    result['has_more'] = True
+                    if not result['events']:
+                        raise FrameworkError('单项事件摘要元信息超出预算，请提高max_chars')
+                    break
+            result['has_more'] = connection.execute('SELECT 1 FROM events WHERE seq>? AND seq<=? LIMIT 1',
+                (result['next_after_seq'], high)).fetchone() is not None
+            if len(json.dumps(result, ensure_ascii=False)) > max_chars:
+                raise FrameworkError('事件导航元信息超出预算，请提高max_chars')
+            return result
+
     def epoch(self, connection=None):
         if connection is None:
             with self.connection() as current:

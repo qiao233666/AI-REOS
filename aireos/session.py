@@ -32,11 +32,19 @@ def context(store,output_prefix=None,query=None,max_chars=10000,task_id=None):
                 raise FrameworkError('指定任务不在本次输出范围内')
             tasks.sort(key=lambda task:task['id']!=task_id)
         visible=[]
+        pending_counts={}
+        for request in tx.list('decision_request'):
+            if request['data']['status']=='pending':
+                task_key=request['data']['task']
+                pending_counts[task_key]=pending_counts.get(task_key,0)+1
         for task in tasks:
             data=task['data']
             if data['status'] not in {'planned','running','delivered'} or (prefix and not any(within(output,prefix) for output in data['contract']['outputs'])):
                 continue
             entry=dict(id=task['id'],title=data['contract']['title'][:120],status=data['status'])
+            entry['pending_decisions']=pending_counts.get(task['id'],0)
+            if entry['pending_decisions']:
+                entry['attention_read']='task-attention task_id='+task['id']
             if data.get('checkpoint'):
                 entry['checkpoint_revision']=data['checkpoint']['revision']
             result['tasks'].append(entry)

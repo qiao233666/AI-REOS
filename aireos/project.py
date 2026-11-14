@@ -30,6 +30,18 @@ class Project:
     def __init__(self, root, token=None):
         self.store = Store(root, token)
 
+    def request_decision(self, task_id, key, question, request_id, context=''):
+        from .attention import request
+        return request(self, task_id, key, question, request_id, context)
+
+    def resolve_decision(self, decision_id, expected_revision, answer, request_id, resolution='answered'):
+        from .attention import resolve
+        return resolve(self, decision_id, expected_revision, answer, request_id, resolution)
+
+    def task_attention(self, task_id, max_chars=10000, offset=0, expected_snapshot=None):
+        from .attention import read
+        return read(self, task_id, max_chars, offset, expected_snapshot)
+
     def checkpoint(self, task_id, progress, next_step, expected_revision, request_id, pending='', references=None):
         from .checkpoints import save
         return save(self, task_id, progress, next_step, expected_revision, request_id, pending, references)
@@ -509,6 +521,9 @@ class Project:
             raise FrameworkError("阶段简述限500字以内；详细信息放产物记录")
         def apply(tx):
             task = self._scope_task(tx, task_id)
+            from .attention import pending
+            if pending(tx, task_id):
+                raise FrameworkError('任务仍有待决请求；请用task-attention读取并明确处理后结案')
             if task["data"]["status"] != "delivered":
                 raise FrameworkError("必须先交付再结束阶段")
             from .coordination import check_leases

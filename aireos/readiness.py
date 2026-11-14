@@ -27,6 +27,10 @@ def collect(tx, task_id, adoptions):
             keys.add(key)
             issues.append(issue)
 
+    from .attention import pending
+    for request in pending(tx, task_id):
+        add('decision_pending', '待决请求尚未处理：' + request['id'] + ' rev=' + str(request['rev'])
+            + '；用task-attention读取，答复或撤销后再结案')
     if task["data"]["status"] != "delivered":
         add("task_not_delivered", "任务须先交付；已完成请求应以原request-id恢复，不能新建采纳请求")
     contract = task["data"]["contract"]

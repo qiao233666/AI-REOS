@@ -11,8 +11,11 @@ from .storage import Store
 
 
 READ_ONLY = {"get", "list", "events", "status", "check-receipt", "check-finalize", "trace", "views-status", "memory-query", "run-evidence", "task-checkpoint",
-    "history-query", "history-get", "history-read", "session-context", "reading-usage"}
+    "history-query", "history-get", "history-read", "session-context", "reading-usage", "task-attention", "event-feed",
+    "client-context", "client-guard-status", "client-adapter-check"}
 PROJECT_COMMANDS = {
+    "request-decision": "request_decision",
+    "resolve-decision": "resolve_decision",
     "checkpoint": "checkpoint",
     "create-task": "create_task",
     "prepare": "prepare",
@@ -92,8 +95,19 @@ def _dispatch(args, params):
     if command in READ_ONLY:
         if args.request_id is not None:
             raise ValueError("只读命令不接受 --request-id")
+        if command in {'client-context','client-guard-status','client-adapter-check'}:
+            from . import client_guard
+            if command == 'client-context':
+                return _call(lambda **values: client_guard.retrieve(args.project, **values), params)
+            if command == 'client-guard-status':
+                return _call(lambda **values: client_guard.status(args.project, **values), params)
+            if params:
+                raise ValueError('client-adapter-check不接受输入参数')
+            return client_guard.check_adapter(args.project)
         if command == "get":
             return _call(store.get, params)
+        if command == 'event-feed':
+            return _call(store.event_feed, params)
         if command == "list":
             return _call(store.list, params)
         if command == "events":
@@ -115,6 +129,8 @@ def _dispatch(args, params):
                 return record(store,'session',_call(method,arguments))
             return _call(method, params)
         project = Project(args.project, token)
+        if command == 'task-attention':
+            return _call(project.task_attention, params)
         if command == 'task-checkpoint':
             return _call(project.task_checkpoint, params)
         if command == "status":
@@ -157,6 +173,8 @@ def _dispatch(args, params):
         return _call(method, params, args.request_id)
     if command in PROJECT_COMMANDS:
         project_methods = {
+            "request-decision": project.request_decision,
+            "resolve-decision": project.resolve_decision,
             "checkpoint": project.checkpoint,
             "create-task": project.create_task,
             "prepare": project.prepare,
