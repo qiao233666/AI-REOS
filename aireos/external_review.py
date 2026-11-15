@@ -138,12 +138,22 @@ class ExternalReview:
                 channel='project-dispatch' if (self.store.root/'aiops/review/cli.py').is_file() else 'framework'))
         return self.store.mutate("external.prepare", payload, request_id, "decide", apply)
 
-    def run(self, package_id, executable, request_id, timeout=1200, runner=None, attempt_id=None):
+    def run(self, package_id, executable, request_id, timeout=1200, runner=None, attempt_id=None, budget=None):
         if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not 0 < timeout <= 3600:
             raise FrameworkError("审核超时应在0至3600秒之间")
+        if budget is not None:
+            fields={'input_tokens','output_tokens','max_context_tokens','packet_bytes'}
+            if (not isinstance(budget,dict) or set(budget)!=fields
+                    or any(type(budget[k]) is not int or budget[k]<=0 for k in ('input_tokens','output_tokens'))
+                    or any(budget[k] is not None and (type(budget[k]) is not int or budget[k]<=0)
+                           for k in ('max_context_tokens','packet_bytes'))):
+                raise FrameworkError('审核预算须完整声明正整数token额度和可选上下文/材料额度')
+            budget=dict(budget)
         def reserve(tx):
             package = typed(tx, package_id, "external_package")
             Project._scope_task(tx, package["data"]["task"])
+            if budget is not None and package['data'].get('channel')!='project-dispatch':
+                raise FrameworkError('显式token预算须沿能核对用量的项目审核派发通道执行，不能只登记为已限制')
             attempt = None
             if package["data"].get("case"):
                 if not attempt_id:
@@ -184,11 +194,13 @@ class ExternalReview:
                     version=version.stdout.decode("utf-8", errors="replace").strip())
             result = tx.create("external_run", dict(package=package_id, task=package["data"]["task"], directory=package["data"]["directory"],
                 argv=argv, executable=identity, status="unknown", timeout=timeout, provider_identity="unverified",
-                note="登记不证明启动或完成；模型名为请求值，不能证明提供方内部映射", attempt=attempt_id))
+                note="登记不证明启动或完成；模型名为请求值，不能证明提供方内部映射", attempt=attempt_id,
+                **({'budget':budget,'budget_mode':'post_turn_audit'} if budget is not None else {})))
             if attempt:
                 tx.replace(attempt["id"], attempt["rev"], {**attempt["data"], "external_run": result["id"]})
             return result
         payload = dict(package=package_id, executable=executable, timeout=timeout, attempt=attempt_id)
+        if budget is not None:payload['budget']=budget
         record = self.store.mutate("external.run.reserve", payload, request_id, "decide", reserve)
         if record["_replayed"]:
             return {**self.store.get(record["id"]), "_replayed": True}
@@ -201,7 +213,7 @@ class ExternalReview:
         code, note, process_status = None, "", "unknown"
         try:
             if package['data'].get('channel')=='project-dispatch' and runner is None:
-                code=self._project_run(package,directory,executable,prompt)
+                code=self._project_run(package,directory,executable,prompt,budget=budget)
             else:
                 with (directory / "events.jsonl").open("wb") as stdout, (directory / "stderr.log").open("wb") as stderr:
                     code = (runner or invoke)(record["data"]["argv"], prompt, directory / "work", stdout, stderr, timeout)
@@ -232,7 +244,7 @@ class ExternalReview:
             delivery=delivery, partial=partial),
             "external-finish-" + digest([request_id, record["id"]]), "decide", finish)
 
-    def _project_run(self,package,directory,executable,prompt):
+    def _project_run(self,package,directory,executable,prompt,budget=None):
         """沿项目原dispatch调用；正式运行身份仍用已有external_run，不接受自制日志冒充。"""
         import sys
         root=str(self.store.root)
@@ -241,7 +253,8 @@ class ExternalReview:
         if Path(core.__file__).resolve()!=(self.store.root/'aiops/dispatch/core.py').resolve():
             raise FrameworkError('项目审核适配来源混用，拒绝派发')
         request=core.make_request('codex-review',directory/'prompt.txt',directory/'dispatch',self.store.root,
-            model=package['data']['requested_model'],reasoning_effort=package['data']['requested_effort'])
+            model=package['data']['requested_model'],reasoning_effort=package['data']['requested_effort'],
+            **({'budget':budget} if budget is not None else {}))
         if package['data'].get('execution'):
             packet=json.loads(self.store.blob(package['data']['execution']['blob']))
             request['execution']={'segment_id':packet['segment']['id'],'report':packet['segment']['data']['report']}
