@@ -12,7 +12,7 @@ from .storage import Store
 
 READ_ONLY = {"get", "list", "events", "status", "check-receipt", "check-finalize", "trace", "views-status", "memory-query", "run-evidence", "task-checkpoint",
     "history-query", "history-get", "history-read", "session-context", "reading-usage", "task-attention", "event-feed",
-    "client-context", "client-guard-status", "client-adapter-check", "execution-status", "execution-review-packet"}
+    "client-context", "client-guard-status", "client-adapter-check", "execution-status", "execution-materials"}
 EXECUTION_COMMANDS = {"execution-configure": "configure", "execution-begin": "begin",
     "execution-report": "report", "execution-decide": "decide"}
 PROJECT_COMMANDS = {
@@ -41,7 +41,7 @@ PROJECT_COMMANDS = {
     "stop-task": "stop_task",
 }
 COMMANDS = READ_ONLY | set(PROJECT_COMMANDS) | set(EXECUTION_COMMANDS) | {
-    "execution-admit", "execution-invalidate", "execution-review",
+    "execution-admit", "execution-invalidate",
     "init", "grant", "claim-output", "takeover-output", "release-output",
     "register-resource", "reserve-resource", "finish-reservation",
     "prepare-external-review", "run-external-review",
@@ -107,9 +107,9 @@ def _dispatch(args, params):
         if command == "execution-status":
             from .execution_control import ExecutionControl
             return _call(ExecutionControl(store).status, params)
-        if command == 'execution-review-packet':
-            from .execution_review import ExecutionReview
-            return _call(ExecutionReview(store).packet,params)
+        if command == 'execution-materials':
+            from .execution_materials import ExecutionMaterials
+            return _call(ExecutionMaterials(store).packet,params)
         if command in {'client-context','client-guard-status','client-adapter-check'}:
             from . import client_guard
             if command == 'client-context':
@@ -168,9 +168,6 @@ def _dispatch(args, params):
 
     if not args.request_id:
         raise ValueError("写操作必须通过 CLI 明确提供 --request-id")
-    if command=='execution-review':
-        from .execution_review import ExecutionReview
-        return _call(ExecutionReview(store).record,params,args.request_id)
     if command in EXECUTION_COMMANDS:
         from .execution_control import ExecutionControl
         return _call(getattr(ExecutionControl(store), EXECUTION_COMMANDS[command]), params, args.request_id)

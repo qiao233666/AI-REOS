@@ -300,7 +300,7 @@ def _execution(root,event,payload,config,session_id):
             return 0,{'systemMessage':message},''
         detail='；'.join(current.get('completion_reasons',[]))
         handoff='；'.join(current.get('handoff_reasons',[]))
-        return 0,{'decision':'block','reason':reason+'；'+detail+'；'+handoff+'。请登记当前证据与缺口，并由独立核查决定hold交接、续行或完成。'},''
+        return 0,{'decision':'block','reason':reason+'；'+detail+'；'+handoff+'。请登记当前证据与缺口，并由项目既有审核意见决定hold交接、续行或完成。'},''
     if event=='PreToolUse':
         event_id=payload.get('tool_use_id') or payload.get('tool_call_id')
         if not event_id:
@@ -313,7 +313,7 @@ def _execution(root,event,payload,config,session_id):
             return 2,None,('执行段未放行：'+'；'.join(result.get('reasons') or ['已处理工具事件不能再次执行'])
                 +'。可Write有限治理JSON到 '+str(example)+'（将末尾命令名替换为白名单命令）；'
                 '报告路径由execution-status的recovery.report_path给出，只能新建有限JSON草稿；'
-                '需保留全部原验收项，之后用add-artifact、execution-report和独立逐项审核恢复。')
+                '需保留全部原验收项，之后用add-artifact、execution-report和项目既有审核恢复。')
     return 0,None,''
 
 

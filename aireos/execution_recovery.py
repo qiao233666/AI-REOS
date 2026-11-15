@@ -14,8 +14,7 @@ from .storage import Store, Transaction, within
 
 MAX_BYTES = 64 * 1024
 SCHEMAS = {
-    'execution-review-packet': ({'segment_id'}, {'max_bytes'}),
-    'execution-review': ({'segment_id', 'assessment'}, set()),
+    'execution-materials': ({'segment_id'}, {'max_bytes'}),
     'execution-status': ({'task_id', 'session_id'}, set()),
     'execution-configure': ({'task_id', 'original_item_id', 'evidence_rules', 'max_tools', 'max_seconds'}, set()),
     'execution-begin': ({'task_id', 'session_id', 'criteria', 'purpose', 'expected'}, set()),
@@ -119,12 +118,12 @@ def validate_input(root, session_id, command, body):
         Project._scope_task(tx, task['id'])
         stages = control._segments(tx, task['id'])
         latest = stages[-1] if stages else None
-        review_commands = {'execution-review-packet', 'execution-review', 'execution-decide', 'review',
+        review_commands = {'execution-materials', 'execution-decide', 'review',
                            'get', 'task-attention', 'resolve-decision'}
         if segment and command != 'get' and (not latest or latest['id'] != segment['id'] or
                         (segment['data']['session_id'] != session_id and command not in review_commands)):
             raise FrameworkError('恢复输入不属于当前会话的最新执行段')
-        readonly = command in {'execution-status', 'task-attention', 'get', 'execution-review-packet'}
+        readonly = command in {'execution-status', 'task-attention', 'get', 'execution-materials'}
         if not readonly and task['data']['status'] not in {'running', 'delivered'}:
             raise FrameworkError('恢复写入须对应已有可交付的正式任务')
         if not readonly and latest and latest['data']['session_id'] != session_id and command not in review_commands:
@@ -132,18 +131,9 @@ def validate_input(root, session_id, command, body):
                 raise FrameworkError('不能通过恢复通道操作其他会话的任务')
         if command in {'execution-status', 'execution-begin'} and body['session_id'] != session_id:
             raise FrameworkError('恢复输入的session_id与宿主当前会话不符')
-        if command in {'execution-review', 'execution-review-packet'}:
-            if command == 'execution-review':
-                if not isinstance(body['assessment'], dict): raise FrameworkError('逐项审核须为明确对象')
-            elif 'max_bytes' in body and (type(body['max_bytes']) is not int or not 1024 <= body['max_bytes'] <= 4194304):
-                raise FrameworkError('审核包显示预算不合法')
-            if command == 'execution-review':
-                from .execution_review import validate
-                from .storage import canonical
-                policy = control._policy(tx, task['id'])
-                report, _ = control._report_body(tx, segment, task, policy)
-                validate({'data': {'checks': [canonical(body['assessment'])]}},
-                         segment, task, policy, report, body['assessment'].get('decision'))
+        if command == 'execution-materials':
+            if 'max_bytes' in body and (type(body['max_bytes']) is not int or not 1024 <= body['max_bytes'] <= 4194304):
+                raise FrameworkError('材料包显示预算不合法')
         elif command == 'execution-configure':
             if stages or any(p['data']['task'] == task['id'] for p in tx.list('execution_policy')):
                 raise FrameworkError('已有执行策略，不能经恢复通道重设原件或预算')

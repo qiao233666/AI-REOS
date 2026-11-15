@@ -1,6 +1,6 @@
 # 分段执行控制
 
-逐项独立核查材料与完整格式见 [EXECUTION_REVIEW.md](EXECUTION_REVIEW.md)。
+审核职责与材料衔接见 [EXECUTION_MATERIALS.md](EXECUTION_MATERIALS.md)；审核直接继承项目既有机制。
 
 此模块把原任务验收、原件字节、阶段报告、独立审核与有界工具执行串接起来。正式事实仍在既有 `Store` 的版本化对象、事件和请求中；不迁移数据库、不新增依赖。工具计数与撤销只进入 `.aireos/cache/execution-control.sqlite3`，不能代替科研证据或任务事实。
 
@@ -57,7 +57,11 @@
 
 报告提交后段变为 `submitted`，工具立即停止。预算已经耗尽、会话已撤销或存在未决请求仍可提交报告，让停机原因及缺口进入正式记录。
 
-随后由独立执行者先用 `execution-review-packet` 读取完整原件、合同、报告和可提供的实际证据，再用 `execution-review` 录入逐项核查；其内部仍调用既有 `Project.review`，明确报告 `expected_revision`，不新建审核库。通用的一句话pass不能续行。核查须准确绑定本段原件、合同、报告及全部原验收，逐项给出判断、准确证据和依据，明确范围保持情况及裁定。`decide(segment_id, review_id, decision, reason, request_id)` 需要 `decide`：
+审核沿用项目原机制。superagent子代理由项目执行层通过现有super_agent_review核查实际产物、回执与验证依据；执行层阶段成果仍交给项目规定的审核渠道，并以既有review/record-reviews登记准确版本的质量意见。控制层不指定新模型、新渠道或新审核格式，不要求每个子代理额外通过一次项目级审核。子包accepted不会自动完成母任务，也不会自动发放下一执行段预算。
+
+可选只读execution-materials汇集完整原件、合同、阶段报告及证据，供执行复核和原审核渠道直接使用。质量意见的method/checks继续使用原有格式，无须专用JSON。审核涉及原任务覆盖和证据真实性时，实际判断仍由原职责和渠道承担；控制层只核对意见是否独立、版本是否准确、是否为最新判定。
+
+`decide(segment_id, review_id, decision, reason, request_id)` 需要原decide能力：
 
 - `continue`：需要针对当前报告准确版本的最新、独立、明确 `pass` 意见。允许诚实局部进展和未知项。当前段进入 `continued`，之后才能创建新段。
 - `hold`：允许 `pass/limit/fail/unknown` 的独立明确意见，保存拒绝/停止理由，进入 `hold`。新会话不能绕过。
@@ -65,7 +69,7 @@
 
 执行者不能审核自己生产的报告。审核目标必须是准确报告引用；别的报告、旧版本、后续已出现拒绝意见的旧pass都不能借用。前段审核本身的准确版本变化也会阻断后续放行。
 
-continue的逐项核查还必须批准唯一 `next_step={criteria,purpose,expected}`。下一次begin三个字段必须与其完全一致，不能拿一个宽泛pass另开偏离原目标的阶段。判断为夸大、未知或范围缩减时只允许hold；继续和完成要求范围保持且每项当前陈述准确。报告本身仍可诚实写unknown，不把“判断未知项的陈述准确”误作“科学问题已解决”。
+下一段仍明确服务哪些原验收项、目的和预期，保持可追溯；不要求它们与审核报告中的文本逐字一致。原目标是否被偷换、合理探索是否仍服务于任务，由项目既有执行复核及审核机制判断，不以一套新增字段重做审核。审核节点按项目阶段及任务配置衔接，控制层不另开付费审核渠道。
 
 `hold` 恢复复用同一段：执行者登记字节确实修订的新报告，再 `report`，再由独立审核者对新报告准确版本审核，最后 `decide(..., "continue", ...)`。换一个item ID登记相同报告字节不算修订。修订不会重置原段预算，只有独立裁定后可开始下一段。无需平行的resume授权记录。
 
@@ -87,7 +91,7 @@ continue的逐项核查还必须批准唯一 `next_step={criteria,purpose,expect
 
 已批准的新段可以正常迭代同一输出文件。前段报告和审核对象仍核对当前准确版本，前段证据仅按当时准确rev/digest及Store快照校验；它们不能自动作为最新完成证据。原任务输入、原件、开始下一段前的上一段、当前报告与最新完成证据继续核对现场字节；旧快照损坏仍阻断。
 
-诚实UNKNOWN、阶段失败或需人决定可以通过正式hold交接：状态另给出 `handoff_ready/reasons`。最新段须属于当前会话，有准确报告、逐项独立hold审核和正式hold裁定，来源链与缓存可确认，且未被新输入撤销；允许保留待决请求。客户端此时可结束本轮，同时明确“原任务尚未完成”，`completion_ready` 仍为false，不能发放下一段或声称科学成功。仅有stopped标签或旧hold不能替代该链；正式stopped还须准确停止记录和原合同停止条件成立。
+诚实UNKNOWN、阶段失败或需人决定可以通过正式hold交接：状态另给出 `handoff_ready/reasons`。最新段须属于当前会话，有准确报告、项目既有渠道的准确hold质量意见和正式hold裁定，来源链与缓存可确认，且未被新输入撤销；允许保留待决请求。客户端此时可结束本轮，同时明确“原任务尚未完成”，`completion_ready` 仍为false，不能发放下一段或声称科学成功。仅有stopped标签或旧hold不能替代该链；正式stopped还须准确停止记录和原合同停止条件成立。
 
 完成有效性忽略已完成段的时间和工具预算，不因预算在完成后耗尽或到期失效。正常经 `Project.close_task` 关闭后仍可确认完成；`stopped_without_acceptance` 不成为完成。缓存缺失或无法确认撤销状态时拒绝完成。新用户输入后的 `invalidate` 即使不改变正式completed记录，也会使旧完成不能自动用于新请求的Stop。
 
@@ -98,7 +102,7 @@ continue的逐项核查还必须批准唯一 `next_step={criteria,purpose,expect
 - 治理输入只写 `.aireos/cache/execution-input-<session_sha256>-<command>.json`。`execution-status` 的 `recovery.input_paths` 给出全部准确路径；未绑定时阻断诊断也给出当前会话路径模板。参数必须符合对应既有CLI方法的有限字段，并精确定位已有正式任务或最新执行段。不会创建新合同、角色或授权。
 - 报告只在原任务输出目录下新建 `execution-reports/<session_sha256>/<segment_id>/report-r<segment_revision>-<0..63>.json`；状态的 `recovery.report_path` 给出首个草稿路径，无需运行散列脚本。每段版本最多64个草稿，只可新建，不能覆写任何已有报告。原任务只有精确科学文件输出、没有可用报告目录时明确拒绝，须按原治理边界处理输出范围。
 - 报告Write在放行前复用正式核心同一份全验收/证据校验，并限制为64KiB、固定字段、有限条目；不得藏任意脚本字段、删验收项、伪造满足状态或使用过期证据。普通科研输出、跨会话文件、旧段、链接和越界路径均不获得恢复豁免。
-- 报告落地后仍须 `add-artifact → execution-report → execution-review → execution-decide`，审核者及裁定者仍持各自原有能力。cache中的CLI参数不能被登记为artifact。恢复文件只是参数和候选报告，不是新的许可或事实真源，也不重发预算。
+- 报告落地后仍须 `add-artifact → execution-report → 原有review/record-reviews → execution-decide`，审核者及裁定者仍持各自原有能力。cache中的CLI参数不能被登记为artifact。恢复文件只是参数和候选报告，不是新的许可或事实真源，也不重发预算。
 
 恢复Bash命令必须使用当前守卫的绝对Python解释器、固定项目入口和纯字面成对参数。拒绝相对解释器、PATH别名、同名程序、变量、`$()`、反引号、通配、管道、重定向、命令串等shell语法。执行段治理豁免还会重读当前会话的准确派生输入文件，核对schema与正式关联，不能用任意预置JSON取得豁免。检索恢复仍使用本会话固定client-query文件。
 
@@ -110,8 +114,8 @@ python -m aireos --project PROJECT --credential-file PLAN_KEY execution-configur
 python -m aireos --project PROJECT --credential-file EXECUTE_KEY execution-begin --input begin.json --request-id begin-1
 python -m aireos --project PROJECT --credential-file EXECUTE_KEY execution-report --input report.json --request-id report-1
 python -m aireos --project PROJECT --credential-file DECIDE_KEY execution-decide --input decision.json --request-id decision-1
-python -m aireos --project PROJECT execution-review-packet --input review-packet.json
-python -m aireos --project PROJECT --credential-file REVIEW_KEY execution-review --input assessment.json --request-id review-1
+python -m aireos --project PROJECT execution-materials --input materials.json
+python -m aireos --project PROJECT --credential-file REVIEW_KEY review --input review.json --request-id review-1
 python -m aireos --project PROJECT execution-admit --input admission.json
 python -m aireos --project PROJECT execution-invalidate --input invalidate.json
 ```
@@ -122,4 +126,4 @@ python -m aireos --project PROJECT execution-invalidate --input invalidate.json
 
 `tests/test_execution_control.py` 使用真实Store、Project、文件快照及不同执行/审核/裁定身份，覆盖完整生命周期、未知进展、删验收项、缺证据类别、自审、报告生产者、精确版本、报告和证据篡改、旧pass、hold修订恢复、预算、缓存丢失/损坏、并发、会话隔离、迟到事件、重放、撤销、只读状态和CLI路由。受信宿主及真实项目包装器的强制接入由宿主集成测试单独验证。
 
-`tests/test_execution_client.py` 从未预置治理输入及报告开始，用真实固定入口子进程执行configure、begin、报告登记、逐项独立审核、hold修订、continue及新段。覆盖预算耗尽/到期后恢复、shell展开/同名解释器拒绝、跨会话及任意科学输出拒绝；这些本地CLI证据不等于真实模型工具及所有客户端都已接入。
+`tests/test_execution_client.py` 从未预置治理输入及报告开始，用真实固定入口子进程执行configure、begin、报告登记、项目既有审核、hold修订、continue及新段。覆盖预算耗尽/到期后恢复、shell展开/同名解释器拒绝、跨会话及任意科学输出拒绝；这些本地CLI证据不等于真实模型工具及所有客户端都已接入。

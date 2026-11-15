@@ -72,25 +72,9 @@ class ExecutionControlTests(unittest.TestCase):
         return artifact
 
     def review(self, artifact, verdict='pass'):
-        try:
-            body = json.loads((self.root / artifact['data']['origin']).read_text(encoding='utf-8'))
-        except ValueError:
-            body = None
-        if not isinstance(body, dict) or body.get('schema') != 'aireos.execution-report/1':
-            return self.reviewer.review(artifact['id'], verdict, '核对无关原件', ['检查准确字节'],
-                                        'review-' + artifact['id'], expected_revision=artifact['rev'])
-        segment = self.owner.store.get(body['segment_id'])
-        from aireos.execution_review import ExecutionReview
-        decision = ('hold' if verdict != 'pass' else
-                    ('completed' if all(c['state'] == 'satisfied' for c in body['criteria']) else 'continue'))
-        assessment = dict(schema='aireos.execution-review/1', segment_id=segment['id'],
-            contract_hash=body['contract_hash'], original=segment['data']['original'],
-            report=segment['data']['report'], decision=decision, scope_preserved=True,
-            criteria=[dict(criterion=c['criterion'], judgment='accurate', evidence=c['evidence'],
-                           finding='逐项核对文件，当前状态与缺口陈述准确') for c in body['criteria']],
-            next_step=dict(criteria=['A1'], purpose='检查实现', expected='可核查进展') if decision == 'continue' else None,
-            reason='独立对照完整原件、原验收和当前准确证据')
-        return ExecutionReview(self.reviewer.store).record(segment['id'], assessment, 'review-' + artifact['id'])
+        return self.reviewer.review(artifact['id'], verdict, '项目既定审核渠道',
+            ['按原任务核对准确版本、实际证据和剩余缺口'],
+            'review-' + artifact['id'], expected_revision=artifact['rev'])
 
     def advance(self, segment):
         artifact = self.submit_report(segment)

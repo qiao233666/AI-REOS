@@ -129,10 +129,7 @@ class ExecutionControl:
                 if last['data']['status'] != 'continued':
                     raise ConflictError('上一段须经独立核查并明确continue；换会话不能绕过')
                 self._report_body(tx, last, task, policy)
-                opinion = self._review(tx, last, last['data']['review']['id'], 'continue')
-                next_step = json.loads(opinion['data']['checks'][0])['next_step']
-                if next_step != dict(criteria=criteria, purpose=purpose, expected=expected):
-                    raise ConflictError('下一段必须准确执行独立核查批准的验收范围、目的和预期')
+                self._review(tx, last, last['data']['review']['id'], 'continue')
             started = now()
             deadline = (datetime.fromisoformat(started) + timedelta(seconds=policy['data']['max_seconds'])).isoformat()
             return tx.create('execution_segment', dict(task=task_id, policy=recall.reference(policy),
@@ -260,12 +257,7 @@ class ExecutionControl:
             raise StaleInput('须使用该报告准确版本的最新独立质量意见')
         if decision != 'hold' and data['verdict'] != 'pass':
             raise FrameworkError('继续或完成须有明确pass；拒绝意见只能进入hold')
-        from .execution_review import validate
-        task = typed(tx, segment['data']['task'], 'task')
-        policy = self._policy(tx, task['id'])
-        body, _ = self._report_body(tx, segment, task, policy,
-                                    historical_evidence=historical_evidence)
-        validate(opinion, segment, task, policy, body, decision)
+        # 质量意见沿用项目既有review语义、职责及渠道；不解析另一套审核JSON。
         return opinion
 
     def decide(self, segment_id, review_id, decision, reason, request_id):

@@ -63,16 +63,10 @@ class ExecutionClientTests(unittest.TestCase):
         self.assertEqual(0,result.returncode,result.stderr)
         return json.loads(result.stdout)
 
-    def assessment(self, segment, decision):
+    def review_parameters(self, segment, verdict):
         current=self.owner.store.get(segment['id'])
-        report=self.owner.store.get(current['data']['report']['id'])
-        body=json.loads((self.root/report['data']['origin']).read_text(encoding='utf-8'))
-        return dict(schema='aireos.execution-review/1',segment_id=segment['id'],
-            contract_hash=current['data']['contract_hash'],original=current['data']['original'],
-            report=current['data']['report'],decision=decision,scope_preserved=True,
-            criteria=[dict(criterion=c['criterion'],judgment='accurate',evidence=c['evidence'],finding='已核查，当前缺口陈述准确') for c in body['criteria']],
-            next_step=dict(criteria=['A1'],purpose='检查实现',expected='可核查进展') if decision=='continue' else None,
-            reason='完整原任务逐项核查')
+        return dict(item_id=current['data']['report']['id'], expected_revision=current['data']['report']['rev'],
+                    verdict=verdict, method='项目既定审核渠道', checks=['按原任务及准确文件核对进展与缺口'])
 
     def recover_report(self, segment, body):
         path=execution_recovery.report_path(self.root,'s1',body)
@@ -106,9 +100,9 @@ class ExecutionClientTests(unittest.TestCase):
         self.assertEqual(0,self.event('Read',{'file_path':'out/one.txt'},'last-budget')[0])
         self.assertEqual(2,self.event('Write',{'file_path':'out/science.py','content':'arbitrary computation'},'over-budget')[0])
         submitted=self.recover_report(segment,self.body(segment))
-        packet=self.invoke('execution-review-packet',{'segment_id':segment['id']})
+        packet=self.invoke('execution-materials',{'segment_id':segment['id']})
         self.assertEqual('原始验收文字',packet['original']['text'])
-        opinion=self.invoke('execution-review',dict(segment_id=segment['id'],assessment=self.assessment(segment,'hold')),'reviewer')
+        opinion=self.invoke('review',self.review_parameters(segment,'limit'),'reviewer')
         self.invoke('execution-decide',dict(segment_id=segment['id'],review_id=opinion['id'],decision='hold',reason='先修订未知项陈述'),'decider')
         stop=client_guard.handle(self.root,'Stop',{'session_id':'s1'})
         self.assertEqual(0,stop[0]); self.assertIn('原任务尚未完成',stop[1]['systemMessage'])
@@ -116,7 +110,7 @@ class ExecutionClientTests(unittest.TestCase):
         self.assertEqual('block',client_guard.handle(self.root,'Stop',{'session_id':'other'})[1]['decision'])
         self.assertEqual(2,self.event('Read',{'file_path':'out/one.txt'},'held-tool')[0])
         self.recover_report(segment,self.body(segment,('unknown','unknown')))
-        opinion=self.invoke('execution-review',dict(segment_id=segment['id'],assessment=self.assessment(segment,'continue')),'reviewer')
+        opinion=self.invoke('review',self.review_parameters(segment,'pass'),'reviewer')
         self.invoke('execution-decide',dict(segment_id=segment['id'],review_id=opinion['id'],decision='continue',reason='逐项报告真实且下一步已批准'),'decider')
         next_segment=self.invoke('execution-begin',dict(task_id=self.task['id'],session_id='s1',criteria=['A1'],purpose='检查实现',expected='可核查进展'),'worker')
         self.assertEqual(2,next_segment['data']['index'])
@@ -126,7 +120,7 @@ class ExecutionClientTests(unittest.TestCase):
         self.configure(); segment=self.begin(); self.install()
         self.recover_report(segment,self.body(segment,('unknown','unknown')))
         self.assertEqual('block',client_guard.handle(self.root,'Stop',{'session_id':'s1'})[1]['decision'])
-        opinion=self.invoke('execution-review',dict(segment_id=segment['id'],assessment=self.assessment(segment,'hold')),'reviewer')
+        opinion=self.invoke('review',self.review_parameters(segment,'limit'),'reviewer')
         self.invoke('execution-decide',dict(segment_id=segment['id'],review_id=opinion['id'],decision='hold',reason='诚实未知交接'),'decider')
         self.assertIn('尚未完成',client_guard.handle(self.root,'Stop',{'session_id':'s1'})[1]['systemMessage'])
         code,_,reason=client_guard.handle(self.root,'UserPromptSubmit',{'session_id':'s1','prompt':'新的用户请求，不得复用旧hold结束'})
