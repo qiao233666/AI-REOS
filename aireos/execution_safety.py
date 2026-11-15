@@ -6,7 +6,7 @@ from .project import Project
 from .storage import within
 
 
-CONTROL = {'.aireos', '.git', '.zcode', '.codex', '.claude', '.opencode', 'vendor'}
+CONTROL = {'.aireos', '.aireos-script-inputs', '.git', '.zcode', '.codex', '.claude', '.opencode', 'vendor'}
 CONTROL_FILES = {'agents.md', 'aiops/charter.md', 'aiops/policy.yaml'}
 
 

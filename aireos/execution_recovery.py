@@ -40,7 +40,7 @@ def input_path(root, session_id, command):
     return Path(root).resolve() / '.aireos/cache' / ('execution-input-' + key + '-' + command + '.json')
 
 
-def plain_target(root, path):
+def plain_target(root, path, *, directory=False):
     """在解析前检查各层链接，避免受限JSON写入替换治理库或科学文件。"""
     root, path = Path(root).resolve(), Path(path).absolute()
     if '..' in path.parts or (path != root and root not in path.parents):
@@ -54,8 +54,11 @@ def plain_target(root, path):
             continue
         if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
             raise FrameworkError('恢复路径不能包含链接或重解析点')
-        if part == path and (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1):
-            raise FrameworkError('恢复目标须为普通单链接文件')
+        if part == path:
+            if directory:
+                if not stat.S_ISDIR(info.st_mode):raise FrameworkError('目标须为普通目录')
+            elif not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise FrameworkError('恢复目标须为普通单链接文件')
     return path.resolve()
 
 

@@ -560,7 +560,11 @@ class ExecutionControl:
                     segment = typed(tx, segment_id, 'execution_segment')
                     task, policy, latest = self._locate(tx, segment['data']['task'], session_id)
                     from .execution_safety import tool_scope
-                    tool_scope(self.store.root, task, tool_name, tool_input)
+                    if tool_name=='aireos_run_tool':
+                        from .isolated_tools import script_scope
+                        script_scope(tx,task,tool_input)
+                    else:
+                        tool_scope(self.store.root, task, tool_name, tool_input)
                     result = self._inspect(tx, cache, task, policy, latest, session_id)
                     if latest['id'] != segment_id:
                         result['allowed'] = False
@@ -594,7 +598,7 @@ class ExecutionControl:
             cache.execute('UPDATE inflight SET outcome=? WHERE event=?', (outcome,event_id))
         return dict(event_id=event_id,outcome=outcome)
 
-    def start_work(self,session_id,segment_id,event_id):
+    def start_work(self,session_id,segment_id,event_id,admitted_event_id=None):
         """宿主既有异步队列的在途登记；不放行shell、不重置工具预算。"""
         with self._cache() as cache:
             with self.store.connection() as connection:
@@ -602,6 +606,13 @@ class ExecutionControl:
                 segment=typed(tx,segment_id,'execution_segment')
                 task,policy,latest=self._locate(tx,segment['data']['task'],session_id)
                 state=self._inspect(tx,cache,task,policy,latest,session_id)
+                if admitted_event_id is not None:
+                    accepted=cache.execute("SELECT 1 FROM inflight WHERE event=? AND session=? AND segment=? AND outcome='running'",
+                        (admitted_event_id,session_id,segment_id)).fetchone()
+                    if not accepted:raise FrameworkError('子工作须绑定仍在途的原宿主许可')
+                    # 最后一次已准入工具可启动自己的子进程，不发新预算或放行新工具。
+                    state['reasons']=[r for r in state['reasons'] if r!='执行段工具预算已耗尽']
+                    state['allowed']=not state['reasons']
                 if not state['allowed'] or latest['id']!=segment_id:
                     raise FrameworkError('异步工作不能在失效或非当前执行段启动')
                 cache.execute('INSERT INTO inflight VALUES(?,?,?,?)',(event_id,session_id,segment_id,'running'))
