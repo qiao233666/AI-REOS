@@ -257,7 +257,7 @@ class Project:
         from .case_budget import reserve
         return self.store.mutate("case.review.begin", dict(case=case_id), request_id, "review", lambda tx: reserve(tx, case_id), corpus=True)
 
-    def review(self, item_id, verdict, method, checks, request_id, expected_revision=None, attempt_id=None):
+    def review(self, item_id, verdict, method, checks, request_id, expected_revision=None, attempt_id=None, provenance=None):
         if isinstance(expected_revision, bool) or not isinstance(expected_revision, int) or expected_revision < 1:
             raise FrameworkError("审核必须明确实际核查的正整数版本，不能省略或为空")
         if verdict not in {"pass", "limit", "fail", "unknown"} or not isinstance(checks, list) or not checks:
@@ -279,11 +279,12 @@ class Project:
                 method=method, checks=checks, reviewer=tx.principal["actor"],
                 review_schema=2, inspected_revision=expected_revision,
                 case=attempt["data"]["case"] if attempt else None, attempt=attempt["id"] if attempt else None,
-                case_round=attempt["data"].get("round", 1) if attempt else None))
+                case_round=attempt["data"].get("round", 1) if attempt else None,
+                provenance=provenance))
             if attempt:
                 tx.replace(attempt["id"], attempt["rev"], {**attempt["data"], "status": "reviewed", "review": opinion["id"]})
             return opinion
-        return self.store.mutate("quality.review", dict(item=item_id, verdict=verdict, method=method, checks=checks, expected_revision=expected_revision, attempt=attempt_id), request_id, "review", apply, corpus=True)
+        return self.store.mutate("quality.review", dict(item=item_id, verdict=verdict, method=method, checks=checks, expected_revision=expected_revision, attempt=attempt_id, provenance=provenance), request_id, "review", apply, corpus=True)
 
     @staticmethod
     def _status(tx, item_id, visiting=None, skip_task_inputs=False):

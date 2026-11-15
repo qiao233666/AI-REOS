@@ -16,7 +16,7 @@ class ExistingReviewReuseTests(unittest.TestCase):
     def test_project_review_accepts_existing_method_and_natural_language_checks(self):
         self.configure();segment=self.begin();report=self.submit_report(segment)
         opinion=self.reviewer.review(report['id'],'pass','项目既定审核渠道的阶段检查',
-            ['已核对原任务和准确文件；实现有进展，物理证据仍缺失'], 'existing-opinion',expected_revision=1)
+            ['已核对原任务和准确文件；实现有进展，物理证据仍缺失'], 'existing-opinion',expected_revision=1,provenance=fixtures.review_provenance(self,report))
         self.decide.decide(segment['id'],opinion['id'],'continue','沿项目既有意见继续补缺口','continue')
         self.assertEqual('running',self.owner.store.get(self.task['id'])['data']['status'])
         next_segment=self.execute.begin(self.task['id'],'s1',['A2'],'补充原要求中的物理证据',
@@ -26,7 +26,7 @@ class ExistingReviewReuseTests(unittest.TestCase):
     def test_project_negative_review_uses_existing_hold_without_special_schema(self):
         self.configure();segment=self.begin();report=self.submit_report(segment)
         opinion=self.reviewer.review(report['id'],'fail','项目规定渠道',
-            ['报告未能证明原任务要求，保持未完成'], 'failed-opinion',expected_revision=1)
+            ['报告未能证明原任务要求，保持未完成'], 'failed-opinion',expected_revision=1,provenance=fixtures.review_provenance(self,report))
         self.decide.decide(segment['id'],opinion['id'],'hold','按原审核意见修订','hold')
         current=self.host.status(self.task['id'],'s1')
         self.assertTrue(current['handoff_ready']);self.assertFalse(current['completion_ready'])

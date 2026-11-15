@@ -122,6 +122,16 @@ python -m aireos --project PROJECT execution-invalidate --input invalidate.json
 
 配置/开始/报告/裁定参数对应同名方法，`request_id` 仅由CLI参数传入。`execution-status` 在既有 `READ_ONLY` 中，不接受请求ID。`execution-admit` 和 `execution-invalidate` 仅改变操作缓存，拒绝凭据及请求ID，不能获得或使用owner密钥。适配器仍须把这些命令纳入自己的明确白名单；核心CLI注册不等于宿主强制执行已经成立。
 
+## 整链修正与运行边界
+
+2026-11-15整链修正后，当前会话采用正式execution_binding，历史任务不删除。普通工具只在任务输出内写文件，控制目录和凭据不能读写；未接入OS隔离的shell/代码工具拒绝。项目所需任意脚本执行尚须接入已验证的隔离运行渠道，不能把拒绝漏洞等同于已具备科研运行能力。
+
+宿主调用admit默认track=true；真实PostToolUse/PostToolUseFailure或原生工具终态调用finish，缺失或unknown不清除在途。superagent排队子包通过start_work与finish衔接同一在途记录；report/decide和admit采用同一锁序，未结束工作不能跨过冻结报告的边界。track=false只供不实际执行工具的可信单元调用，不得用于运行宿主。
+
+完成和正向验收证据消费原Project状态中的否定、撤回和争议，不要求每份候选材料增加一轮审核。来源失效时允许归档全部原验收的非satisfied报告及原checkpoint/stop-task；waiting_ready只表示可明确未完成地交还用户，不给予pass、续期或科学完成。待决、失效接续和撤销记录均核对；新输入撤销的旧交接不能复用。
+
+执行阶段审核仍沿用既有review/record-reviews与method/checks；可选provenance仅引用原渠道实际external_run身份。受管执行段放行核对该运行的固定原件、准确报告、真实stdin、完成事件及报告快照；普通输出目录的自制日志不能作为已派发证明。原prepare-external-review自动从正式段生成完整材料，不能只用执行者question缩小审核；项目有aiops/review/cli.py时，原run-external-review通过既有aiops.dispatch调用项目渠道，沿用原授权和日志。运行资料留在受保护的治理运行目录。意见仍需原有角色独立核查，程序不从自然语言报告自动制造通过。
+
 ## 验证范围
 
 `tests/test_execution_control.py` 使用真实Store、Project、文件快照及不同执行/审核/裁定身份，覆盖完整生命周期、未知进展、删验收项、缺证据类别、自审、报告生产者、精确版本、报告和证据篡改、旧pass、hold修订恢复、预算、缓存丢失/损坏、并发、会话隔离、迟到事件、重放、撤销、只读状态和CLI路由。受信宿主及真实项目包装器的强制接入由宿主集成测试单独验证。

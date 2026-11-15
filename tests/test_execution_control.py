@@ -47,6 +47,10 @@ class ExecutionControlTests(unittest.TestCase):
         (self.root / 'out' / name).write_text(content, encoding='utf-8')
         return self.worker.add_artifact('out/' + name, name, self.task['id'], 'artifact-' + name)
 
+    def admit_without_tool_execution(self,*args,**kwargs):
+        """仅检查准入/预算的单元夹具；本调用不启动真实工具。"""
+        return self.host.admit(*args,track=False,**kwargs)
+
     def configure(self, max_tools=2, max_seconds=120):
         return self.control.configure(self.task['id'], self.original['id'],
             [{'criterion': 'A1', 'required_classes': ['implementation']},
@@ -72,9 +76,10 @@ class ExecutionControlTests(unittest.TestCase):
         return artifact
 
     def review(self, artifact, verdict='pass'):
+        provenance=review_provenance(self,artifact)
         return self.reviewer.review(artifact['id'], verdict, '项目既定审核渠道',
             ['按原任务核对准确版本、实际证据和剩余缺口'],
-            'review-' + artifact['id'], expected_revision=artifact['rev'])
+            'review-' + artifact['id'], expected_revision=artifact['rev'],provenance=provenance)
 
     def advance(self, segment):
         artifact = self.submit_report(segment)
@@ -104,9 +109,9 @@ class ExecutionControlTests(unittest.TestCase):
     def test_next_approved_stage_can_iterate_code_and_complete_from_new_snapshot(self):
         _, old_code, _, _ = self.first_code_stage()
         second = self.begin('s1', 'code-second')
-        self.assertTrue(self.host.admit('s1', 'write', {'file_path': 'out/code.py'}, 'code-edit', segment_id=second['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'write', {'file_path': 'out/code.py'}, 'code-edit', segment_id=second['id'])['allowed'])
         (self.root / 'out/code.py').write_text('# 第二段实现\nvalue = 2\n', encoding='utf-8')
-        self.assertTrue(self.host.admit('s1', 'read', {'file_path': 'out/code.py'}, 'after-code-edit', segment_id=second['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {'file_path': 'out/code.py'}, 'after-code-edit', segment_id=second['id'])['allowed'])
         updated = self.worker.add_artifact('out/code.py', '第二段准确源码', self.task['id'], 'code-v2-artifact')
         physical = self.artifact('code-physical.txt', '第二段独立证据')
         evidence = [[dict(id=updated['id'], rev=1, **{'class': 'implementation'})],
@@ -137,7 +142,7 @@ class ExecutionControlTests(unittest.TestCase):
         (self.root / 'out/code.py').write_text('# 已获准第二段正常迭代\n', encoding='utf-8')
         self.assertTrue(self.host.status(self.task['id'], 's1')['allowed'])
         (self.root / '.aireos/objects' / old_code['data']['blob']).write_bytes(b'broken old snapshot')
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'corrupt-old-snapshot', segment_id=second['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'corrupt-old-snapshot', segment_id=second['id'])['allowed'])
 
     def test_policy_preserves_every_original_acceptance(self):
         policy = self.configure()
@@ -149,9 +154,9 @@ class ExecutionControlTests(unittest.TestCase):
     def test_budget_and_new_session_cannot_skip_review(self):
         self.configure()
         segment = self.begin()
-        self.assertTrue(self.host.admit('s1', 'read', {}, 'e1', segment_id=segment['id'])['allowed'])
-        self.assertTrue(self.host.admit('s1', 'read', {}, 'e2', segment_id=segment['id'])['allowed'])
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'e3', segment_id=segment['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'e1', segment_id=segment['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'e2', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'e3', segment_id=segment['id'])['allowed'])
         with self.assertRaises(FrameworkError):
             self.begin('s2', 'session-bypass')
 
@@ -293,7 +298,7 @@ class ExecutionControlTests(unittest.TestCase):
         segment = self.begin()
         blob = self.root / '.aireos/objects' / self.original['data']['blob']
         blob.write_bytes(b'broken snapshot')
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'bad-blob', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'bad-blob', segment_id=segment['id'])['allowed'])
 
     def test_foreign_producer_cannot_report_for_executor(self):
         self.configure()
@@ -308,35 +313,35 @@ class ExecutionControlTests(unittest.TestCase):
         self.configure()
         segment = self.begin()
         artifact = self.submit_report(segment)
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'submitted-tool', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'submitted-tool', segment_id=segment['id'])['allowed'])
         review = self.review(artifact, 'fail')
         self.decide.decide(segment['id'], review['id'], 'hold', '停止', 'hold')
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'hold-tool', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'hold-tool', segment_id=segment['id'])['allowed'])
 
     def test_exact_replay_does_not_charge_or_bypass_revocation(self):
         self.configure(max_tools=1)
         segment = self.begin()
-        first = self.host.admit('s1', 'read', {'path': 'x'}, 'one', segment_id=segment['id'])
-        again = self.host.admit('s1', 'read', {'path': 'x'}, 'one', segment_id=segment['id'])
+        first = self.admit_without_tool_execution('s1', 'read', {'path': 'x'}, 'one', segment_id=segment['id'])
+        again = self.admit_without_tool_execution('s1', 'read', {'path': 'x'}, 'one', segment_id=segment['id'])
         self.assertTrue(first['allowed'])
         self.assertTrue(again['allowed'])
         self.assertTrue(again['replayed'])
         self.assertEqual(1, again['used'])
-        self.assertFalse(self.host.admit('s1', 'read', {'path': 'y'}, 'one', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'path': 'y'}, 'one', segment_id=segment['id'])['allowed'])
         self.host.invalidate('s1')
-        self.assertFalse(self.host.admit('s1', 'read', {'path': 'x'}, 'one', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'path': 'x'}, 'one', segment_id=segment['id'])['allowed'])
         self.assertEqual(1, self.host.status(self.task['id'], 's1')['used'])
 
     def test_cross_session_and_late_old_event_cannot_charge_new_segment(self):
         self.configure()
         first = self.begin()
-        self.assertFalse(self.host.admit('other', 'read', {}, 'wrong-session', segment_id=first['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('other', 'read', {}, 'wrong-session', segment_id=first['id'])['allowed'])
         self.advance(first)
         second = self.begin('s1', 'second')
-        late = self.host.admit('s1', 'read', {}, 'late', segment_id=first['id'])
+        late = self.admit_without_tool_execution('s1', 'read', {}, 'late', segment_id=first['id'])
         self.assertFalse(late['allowed'])
         self.assertEqual(0, self.host.status(self.task['id'], 's1')['used'])
-        self.assertTrue(self.host.admit('s1', 'read', {}, 'second-first', segment_id=second['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'second-first', segment_id=second['id'])['allowed'])
 
     def test_atomic_counter_across_host_instances(self):
         self.configure(max_tools=2)
@@ -354,20 +359,20 @@ class ExecutionControlTests(unittest.TestCase):
         with patch('aireos.execution_control.datetime') as clock:
             clock.now.return_value = future
             clock.fromisoformat.side_effect = datetime.fromisoformat
-            self.assertFalse(self.host.admit('s1', 'read', {}, 'expired', segment_id=segment['id'])['allowed'])
+            self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'expired', segment_id=segment['id'])['allowed'])
         pending = self.worker.request_decision(self.task['id'], 'scope', '需要新授权吗', 'pending')
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'pending-event', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'pending-event', segment_id=segment['id'])['allowed'])
         self.decider.resolve_decision(pending['id'], 1, '仅按原合同', 'answer')
-        self.assertTrue(self.host.admit('s1', 'read', {}, 'after-answer', segment_id=segment['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'after-answer', segment_id=segment['id'])['allowed'])
         (self.root / 'spec.txt').write_text('输入变化', encoding='utf-8')
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'changed-input', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'changed-input', segment_id=segment['id'])['allowed'])
 
     def test_original_change_blocks_status_admission_and_next_segment(self):
         self.configure()
         segment = self.begin()
         (self.root / 'out/original.txt').write_text('替换原件', encoding='utf-8')
         self.assertFalse(self.host.status(self.task['id'], 's1')['allowed'])
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'changed-original', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'changed-original', segment_id=segment['id'])['allowed'])
 
     def test_lost_counter_is_not_reinitialized_by_begin_replay(self):
         self.configure()
@@ -376,7 +381,7 @@ class ExecutionControlTests(unittest.TestCase):
         with sqlite3.connect(database) as connection:
             connection.execute('DELETE FROM counters')
         self.begin()
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'lost-counter', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'lost-counter', segment_id=segment['id'])['allowed'])
 
     def test_unavailable_cache_fails_closed_and_does_not_update_formal_facts(self):
         self.configure()
@@ -385,7 +390,7 @@ class ExecutionControlTests(unittest.TestCase):
         database = self.root / '.aireos/cache/execution-control.sqlite3'
         database.write_bytes(b'corrupted operation cache')
         self.assertFalse(self.host.status(self.task['id'], 's1')['allowed'])
-        self.assertFalse(self.host.admit('s1', 'read', {}, 'cache-bad', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'cache-bad', segment_id=segment['id'])['allowed'])
         self.assertEqual(before, len(self.owner.store.events()))
 
     def test_status_requires_exact_session_and_does_not_mutate(self):
@@ -421,7 +426,7 @@ class ExecutionControlTests(unittest.TestCase):
     def test_completion_is_separate_from_spent_or_expired_tool_budget(self):
         self.configure(max_tools=1)
         segment = self.begin()
-        self.assertTrue(self.host.admit('s1', 'read', {}, 'last-tool', segment_id=segment['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'last-tool', segment_id=segment['id'])['allowed'])
         self.complete(segment)
         status = self.host.status(self.task['id'], 's1')
         self.assertFalse(status['allowed'])
@@ -579,6 +584,20 @@ class ExecutionControlTests(unittest.TestCase):
         self.assertTrue(self.host.status(self.task['id'], 's1')['handoff_ready'])
         self.owner.store.replace(review['id'], review['rev'], {**review['data'], 'method': '审核准确版本被改'}, 'changed-hold-review')
         self.assertFalse(self.host.status(self.task['id'], 's1')['handoff_ready'])
+
+
+def review_provenance(case, artifact):
+    """既有外审入口的无模型替身；固定原件和实际stdin均必须实际经过入口。"""
+    from aireos.external_review import ExternalReview
+    adapter=ExternalReview(case.owner.store)
+    package=adapter.prepare(case.task['id'],[artifact['data']['origin']],'按完整原任务审核',
+        'test-model','high','仅合成测试授权','trace-prepare-'+artifact['id'])
+    def runner(argv,prompt,work,stdout,stderr,timeout):
+        Path(argv[argv.index('-o')+1]).write_text('合成渠道报告：已核查材料，科学真实性不由本测试保证',encoding='utf-8')
+        stdout.write(b'{"type":"turn.completed"}\n')
+        return 0
+    run=adapter.run(package['id'],'test-executable','trace-run-'+artifact['id'],runner=runner)
+    return {'type':'external_run','id':run['id']}
 
 
 if __name__ == '__main__':

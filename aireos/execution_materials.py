@@ -21,8 +21,8 @@ class ExecutionMaterials:
             tx=Transaction(self.store,connection,{'scopes':['.']})
             segment=typed(tx,segment_id,'execution_segment')
             policy=control._policy(tx,segment['data']['task'])
-            task=control._base(tx,segment['data']['task'],policy)
-            if segment['data']['status']!='submitted':
+            task=control._base(tx,segment['data']['task'],policy,allow_closed=True,allow_stopped=True)
+            if segment['data']['status'] not in {'submitted','hold','continued','completed'}:
                 raise FrameworkError('须先提交本段准确报告，再构造执行材料包')
             body,_=control._report_body(tx,segment,task,policy)
             original=control._ref(tx,policy['data']['original'],artifact=True)

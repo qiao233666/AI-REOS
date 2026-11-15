@@ -15,7 +15,7 @@ import uuid
 from .errors import FrameworkError
 
 
-EVENTS = ('SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop')
+EVENTS = ('SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Stop')
 POLICY = 'aiops/aireos/retrieval-policy.json'
 
 
@@ -273,6 +273,13 @@ def _execution(root,event,payload,config,session_id):
     from .execution_control import ExecutionControl
     from .storage import Store
     control=ExecutionControl(Store(root))
+    if event in {'PostToolUse','PostToolUseFailure'}:
+        key=payload.get('tool_use_id') or payload.get('tool_call_id')
+        with control._cache() as cache:
+            row=cache.execute('SELECT segment FROM inflight WHERE event=? AND session=?',(key,session_id)).fetchone()
+        if row:
+            control.finish(session_id,row['segment'],key,'failed' if event=='PostToolUseFailure' else 'completed')
+        return 0,None,''
     if event=='PreToolUse' and payload.get('tool_name')=='Write':
         values=payload.get('tool_input') or {}
         name=values.get('file_path')
@@ -298,6 +305,8 @@ def _execution(root,event,payload,config,session_id):
         if current.get('handoff_ready') is True:
             message='正式hold交接：原任务尚未完成，当前未知、失败或待决仍保留；本轮结束不授予续行或科学成功。'
             return 0,{'systemMessage':message},''
+        if current.get('waiting_ready') is True:
+            return 0,{'systemMessage':'原任务尚未完成；按已有待决、来源失效接续或停止记录交还用户，不授予续行或完成。'},''
         detail='；'.join(current.get('completion_reasons',[]))
         handoff='；'.join(current.get('handoff_reasons',[]))
         return 0,{'decision':'block','reason':reason+'；'+detail+'；'+handoff+'。请登记当前证据与缺口，并由项目既有审核意见决定hold交接、续行或完成。'},''
@@ -306,7 +315,7 @@ def _execution(root,event,payload,config,session_id):
         if not event_id:
             return 2,None,'真实宿主未提供tool_use_id/tool_call_id；无法安全计数，不放行。'
         result=control.admit(session_id=session_id,segment_id=current.get('segment_id'),
-            tool_name=payload.get('tool_name'),tool_input=payload.get('tool_input') or {},event_id=event_id)
+            tool_name=payload.get('tool_name'),tool_input=payload.get('tool_input') or {},event_id=event_id,track=True)
         if not result.get('allowed') or result.get('replayed'):
             from .execution_recovery import input_path
             example=input_path(root,session_id,'execution-status')

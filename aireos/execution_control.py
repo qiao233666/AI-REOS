@@ -55,7 +55,7 @@ class ExecutionControl:
             raise StaleInput('引用文件或快照已变化: ' + ref['id'])
         return item
 
-    def _base(self, tx, task_id, policy, allow_closed=False, allow_stopped=False):
+    def _base(self, tx, task_id, policy, allow_closed=False, allow_stopped=False, archival=False):
         task = Project._scope_task(tx, task_id) if allow_closed or allow_stopped else Project._task_open(tx, task_id)
         allowed = {'running', 'delivered'} | ({'closed'} if allow_closed else set()) | ({'stopped'} if allow_stopped else set())
         if task['data']['status'] not in allowed:
@@ -63,6 +63,10 @@ class ExecutionControl:
         if recall.contract_hash(task) != policy['data']['contract_hash']:
             raise StaleInput('原任务合同已经变化，禁止沿用执行策略')
         failures = inputs.validate(tx, task['data']['contract'].get('inputs', []))
+        if archival:
+            original=tx.get(policy['data']['original']['id'],policy['data']['original']['rev'])
+            tx.store.blob(original['data']['blob'])
+            return task
         if failures:
             raise StaleInput('；'.join(failures))
         self._ref(tx, policy['data']['original'], artifact=True)
@@ -130,6 +134,12 @@ class ExecutionControl:
                     raise ConflictError('上一段须经独立核查并明确continue；换会话不能绕过')
                 self._report_body(tx, last, task, policy)
                 self._review(tx, last, last['data']['review']['id'], 'continue')
+            bindings = [obj for obj in tx.list('execution_binding') if obj['data']['session_id'] == session_id]
+            binding = dict(session_id=session_id, task=task_id)
+            if bindings:
+                tx.replace(bindings[0]['id'], bindings[0]['rev'], binding)
+            else:
+                tx.create('execution_binding', binding)
             started = now()
             deadline = (datetime.fromisoformat(started) + timedelta(seconds=policy['data']['max_seconds'])).isoformat()
             return tx.create('execution_segment', dict(task=task_id, policy=recall.reference(policy),
@@ -211,6 +221,9 @@ class ExecutionControl:
                     tx.store.blob(item['data']['blob'])
                 else:
                     self._ref(tx, exact, artifact=True)
+                    from .execution_safety import negative_basis
+                    if entry['state']=='satisfied':
+                        negative_basis(tx, item)
                 # 只固定证据来源；类别真实性由独立审核承担，文字标签本身不证明物理正确。
                 refs.append({**exact, 'class': ref['class']})
                 classes.add(ref['class'])
@@ -219,11 +232,17 @@ class ExecutionControl:
         return body, refs
 
     def report(self, segment_id, artifact_id, request_id):
+        self._quiescent(segment_id)
         def apply(tx):
             segment = typed(tx, segment_id, 'execution_segment')
             data = segment['data']
             policy = self._policy(tx, data['task'])
-            task = self._base(tx, data['task'], policy)
+            stale=False
+            try:
+                task = self._base(tx, data['task'], policy)
+            except StaleInput:
+                task = self._base(tx,data['task'],policy,archival=True)
+                stale=True
             if data['executor'] != tx.principal['actor']:
                 raise PermissionDenied('只有本段执行者可以提交或修订阶段报告')
             if data['status'] not in {'active', 'submitted', 'hold'}:
@@ -236,13 +255,15 @@ class ExecutionControl:
                 if previous['data'].get('blob') == artifact['data'].get('blob'):
                     raise ConflictError('换新产物id但报告字节未修订，不能解除原段的核查要求')
             body, refs = self._report_body(tx, segment, task, policy, artifact)
+            if stale and any(entry['state']=='satisfied' for entry in body['criteria']):
+                raise StaleInput('来源失效只能归档缺口，不能登记满足验收')
             return tx.replace(segment_id, segment['rev'], {**data, 'status': 'submitted',
                 'report': recall.reference(artifact), 'evidence': refs,
                 'states': {entry['criterion']: entry['state'] for entry in body['criteria']},
-                'reported_at': now(), 'review': None, 'decision': None})
+                'reported_at': now(), 'review': None, 'decision': None,'review_trace':None})
 
-        return self.store.mutate('execution.report', dict(segment=segment_id, artifact=artifact_id),
-                                 request_id, 'execute', apply)
+        return self._stable_mutate(segment_id,'execution.report',dict(segment=segment_id,artifact=artifact_id),
+                                   request_id,'execute',apply)
 
     def _review(self, tx, segment, review_id, decision, historical_evidence=False):
         opinion = typed(tx, review_id, 'review')
@@ -257,10 +278,15 @@ class ExecutionControl:
             raise StaleInput('须使用该报告准确版本的最新独立质量意见')
         if decision != 'hold' and data['verdict'] != 'pass':
             raise FrameworkError('继续或完成须有明确pass；拒绝意见只能进入hold')
+        from .review_trace import check
+        trace=check(tx.store,data.get('provenance'),segment,self._policy(tx,segment['data']['task']),historical=historical_evidence)
+        if segment['data'].get('review_trace') and trace!=segment['data']['review_trace']:
+            raise StaleInput('实际审核轨迹与裁定时固定记录不符')
         # 质量意见沿用项目既有review语义、职责及渠道；不解析另一套审核JSON。
         return opinion
 
     def decide(self, segment_id, review_id, decision, reason, request_id):
+        self._quiescent(segment_id)
         _text(reason, '裁定理由')
         if decision not in {'continue', 'hold', 'completed'}:
             raise FrameworkError('裁定须为continue/hold/completed')
@@ -275,6 +301,8 @@ class ExecutionControl:
                 raise ConflictError('必须先提交当前报告；hold恢复须先登记修订报告再独立核查')
             body, _ = self._report_body(tx, segment, task, policy)
             opinion = self._review(tx, segment, review_id, decision)
+            from .review_trace import check
+            trace=check(tx.store,opinion['data'].get('provenance'),segment,policy)
             if decision != 'hold':
                 self._no_pending(tx, data['task'])
             if decision == 'completed' and any(entry['state'] != 'satisfied' for entry in body['criteria']):
@@ -282,9 +310,17 @@ class ExecutionControl:
             return tx.replace(segment_id, segment['rev'], {**data,
                 'status': 'continued' if decision == 'continue' else decision,
                 'decision': decision, 'reason': reason, 'review': recall.reference(opinion),
-                'decided_by': tx.principal['actor'], 'decided_at': now()})
+                'decided_by': tx.principal['actor'], 'decided_at': now(),'review_trace':trace})
 
-        return self.store.mutate('execution.decide', payload, request_id, 'decide', apply)
+
+        return self._stable_mutate(segment_id,'execution.decide',payload,request_id,'decide',apply)
+
+    def _stable_mutate(self,segment_id,operation,payload,request_id,capability,apply):
+        # 与admit相同的cache→正式库锁序，封闭检查无在途到提交记录之间的竞争窗口。
+        with self._cache() as cache:
+            if cache.execute("SELECT 1 FROM inflight WHERE segment=? AND outcome='running'",(segment_id,)).fetchone():
+                raise FrameworkError('本段仍有在途工具，不能冻结报告或推进审核')
+            return self.store.mutate(operation,payload,request_id,capability,apply)
 
     @contextmanager
     def _cache(self):
@@ -303,6 +339,7 @@ class ExecutionControl:
             connection.execute('CREATE TABLE IF NOT EXISTS counters(segment TEXT PRIMARY KEY, used INTEGER NOT NULL)')
             connection.execute('CREATE TABLE IF NOT EXISTS revoked(session TEXT NOT NULL, segment TEXT NOT NULL, PRIMARY KEY(session,segment))')
             connection.execute('CREATE TABLE IF NOT EXISTS events(event TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result TEXT NOT NULL)')
+            connection.execute('CREATE TABLE IF NOT EXISTS inflight(event TEXT PRIMARY KEY, session TEXT NOT NULL, segment TEXT NOT NULL, outcome TEXT NOT NULL)')
             yield connection
             connection.commit()
         except BaseException:
@@ -319,6 +356,10 @@ class ExecutionControl:
         return row['used']
 
     def _locate(self, tx, task_id, session_id):
+        if task_id is None:
+            bindings = [obj for obj in tx.list('execution_binding') if obj['data']['session_id'] == session_id]
+            if len(bindings) == 1:
+                task_id = bindings[0]['data']['task']
         if task_id is None:
             matches = {obj['data']['task'] for obj in tx.list('execution_segment')
                        if obj['data']['session_id'] == session_id}
@@ -482,13 +523,18 @@ class ExecutionControl:
                 if cache is not None:
                     cache.close()
             from .execution_recovery import describe_paths
+            try:
+                waiting_ready=self.waiting(task['id'],session_id)
+            except (FrameworkError,OSError,sqlite3.Error):
+                waiting_ready=False
             return {**result, 'task_id': task['id'], 'session_id': session_id,
+                'waiting_ready': waiting_ready,
                 'policy': policy, 'segment': segment, 'original': policy['data']['original'],
                 'recovery': describe_paths(self.store.root, task, segment, session_id),
                 'criteria': [dict(criterion=key, acceptance=text) for key, text in
                              zip(self._criteria(task), task['data']['contract']['acceptance'])]}
 
-    def admit(self, session_id, tool_name, tool_input, event_id, segment_id=None):
+    def admit(self, session_id, tool_name, tool_input, event_id, segment_id=None, track=True):
         """只供受信宿主调用；明确段ID防止迟到事件串入下一段。"""
         try:
             for value, label in ((session_id, '会话id'), (tool_name, '工具名'),
@@ -509,6 +555,8 @@ class ExecutionControl:
                     tx = Transaction(self.store, connection, {'scopes': ['.']})
                     segment = typed(tx, segment_id, 'execution_segment')
                     task, policy, latest = self._locate(tx, segment['data']['task'], session_id)
+                    from .execution_safety import tool_scope
+                    tool_scope(self.store.root, task, tool_name, tool_input)
                     result = self._inspect(tx, cache, task, policy, latest, session_id)
                     if latest['id'] != segment_id:
                         result['allowed'] = False
@@ -521,11 +569,72 @@ class ExecutionControl:
                     if result['allowed']:
                         cache.execute('INSERT INTO counters(segment,used) VALUES(?,1) ON CONFLICT(segment) DO UPDATE SET used=used+1', (segment_id,))
                         result['used'] += 1
+                        if track:
+                            cache.execute('INSERT INTO inflight VALUES(?,?,?,?)', (event_id,session_id,segment_id,'running'))
                     result['replayed'] = False
                     cache.execute('INSERT INTO events VALUES(?,?,?)', (event_id, fingerprint, canonical(result)))
                     return result
         except (FrameworkError, OSError, sqlite3.Error, TypeError, ValueError, KeyError) as exc:
             return dict(allowed=False, reasons=['执行控制不可放行: ' + str(exc)], segment_id=segment_id)
+
+    def finish(self, session_id, segment_id, event_id, outcome):
+        """由真实宿主结束事件登记，不接受模型自报或用新事件清理旧任务。"""
+        if outcome not in {'completed', 'failed'}:
+            raise FrameworkError('未确认结束不能清除在途工具')
+        with self._cache() as cache:
+            row = cache.execute('SELECT * FROM inflight WHERE event=?', (event_id,)).fetchone()
+            if row is None or row['session'] != session_id or row['segment'] != segment_id:
+                raise FrameworkError('结束事件与已获准工具不匹配')
+            if row['outcome'] not in {'running', outcome}:
+                raise FrameworkError('工具终态冲突')
+            cache.execute('UPDATE inflight SET outcome=? WHERE event=?', (outcome,event_id))
+        return dict(event_id=event_id,outcome=outcome)
+
+    def start_work(self,session_id,segment_id,event_id):
+        """宿主既有异步队列的在途登记；不放行shell、不重置工具预算。"""
+        with self._cache() as cache:
+            with self.store.connection() as connection:
+                tx=Transaction(self.store,connection,{'scopes':['.']})
+                segment=typed(tx,segment_id,'execution_segment')
+                task,policy,latest=self._locate(tx,segment['data']['task'],session_id)
+                state=self._inspect(tx,cache,task,policy,latest,session_id)
+                if not state['allowed'] or latest['id']!=segment_id:
+                    raise FrameworkError('异步工作不能在失效或非当前执行段启动')
+                cache.execute('INSERT INTO inflight VALUES(?,?,?,?)',(event_id,session_id,segment_id,'running'))
+        return dict(event_id=event_id,segment_id=segment_id)
+
+    def _quiescent(self, segment_id):
+        with self._cache() as cache:
+            if cache.execute("SELECT 1 FROM inflight WHERE segment=? AND outcome='running'", (segment_id,)).fetchone():
+                raise FrameworkError('本段仍有在途工具，不能冻结报告或推进审核')
+
+    def waiting(self, task_id, session_id):
+        """复用原待决、checkpoint和stop记录交还用户；不授予审核或执行资格。"""
+        with self.store.connection() as connection:
+            tx = Transaction(self.store, connection, {'scopes':['.']})
+            task, policy, segment = self._locate(tx,task_id,session_id)
+            if not segment or segment['data']['session_id'] != session_id:
+                return False
+            database=self.store.home/'cache/execution-control.sqlite3'
+            if not database.is_file() or database.is_symlink() or database.parent.is_symlink():
+                return False
+            with sqlite3.connect(database.as_uri()+'?mode=ro',uri=True) as cache:
+                cache.row_factory=sqlite3.Row
+                if cache.execute("SELECT 1 FROM inflight WHERE segment=? AND outcome='running'",(segment['id'],)).fetchone():
+                    return False
+                self._usage(cache,segment)
+                if cache.execute('SELECT 1 FROM revoked WHERE session=? AND segment=?',(session_id,segment['id'])).fetchone():
+                    return False
+            if pending(tx,task['id']) or task['data']['status']=='stopped':
+                return True
+            try:
+                self._base(tx,task['id'],policy)
+            except StaleInput:
+                card=task['data'].get('checkpoint')
+                return bool((card and card['updated'] > segment['data']['started_at']) or (
+                    segment['data'].get('report') and segment['data']['status']=='submitted'
+                    and all(value!='satisfied' for value in segment['data'].get('states',{}).values())))
+            return False
 
     def invalidate(self, session_id):
         _text(session_id, '会话id')

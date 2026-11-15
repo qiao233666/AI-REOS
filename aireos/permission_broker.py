@@ -26,7 +26,7 @@ def guarded_permissions(permissions):
 
 class PermissionBroker:
     """只处理绑定原生会话的待决许可；不会自动审核报告或续期。"""
-    def __init__(self, api, admit, session_id, segment_id, native_session_id, log_path, defer_interrupt=False):
+    def __init__(self, api, admit, session_id, segment_id, native_session_id, log_path, defer_interrupt=False, finish=None):
         for value in (session_id,segment_id,native_session_id):
             if not isinstance(value,str) or not value.strip():
                 raise FrameworkError('许可代理须绑定正式会话、准确执行段和原生会话')
@@ -37,6 +37,8 @@ class PermissionBroker:
         self.log_path=Path(log_path)
         self.handled=set()
         self.approved_tools=set()
+        self.tool_events={}
+        self.finish=finish
         self.defer_interrupt=defer_interrupt
         self.blocked=False
         self.reason=[]
@@ -70,7 +72,7 @@ class PermissionBroker:
                 # 绑定原生请求ID，不接受执行者在提示里自报完成或工具身份。
                 check=self.admit(session_id=self.session_id,segment_id=self.segment_id,
                     tool_name=action,tool_input={'resources':resources,'metadata':request.get('metadata',{}),
-                    'source':request.get('source')},event_id=self.native+':'+key)
+                    'source':request.get('source')},event_id=self.native+':'+key,track=True)
             allow=check.get('allowed') is True and not check.get('replayed',False)
             decision='once' if allow else 'reject'
             self._record({'native_session_id':self.native,'request_id':key,'segment_id':self.segment_id,
@@ -79,6 +81,7 @@ class PermissionBroker:
             self.handled.add(key)
             if allow and isinstance(source,dict) and source.get('type')=='tool' and isinstance(source.get('id'),str):
                 self.approved_tools.add(source['id'])
+                self.tool_events[source['id']]=self.native+':'+key
             self.api('POST',self.path+'/permission/'+quote(key,safe='')+'/reply',
                      {'decision':decision,'message':'AI-REOS执行段核查：'+(';'.join(check.get('reasons',[])) or '仅允许当前一次动作')})
             if not allow:
@@ -88,3 +91,15 @@ class PermissionBroker:
                     self.api('POST',self.path+'/interrupt')
                 return False
         return True
+
+    def finish_context(self, context):
+        """只消费原生工具终态；缺失工具或流中断保留在途，不能猜测完成。"""
+        if self.finish is None:
+            return
+        for message in context.get('data', []):
+            for part in message.get('info',message).get('content', []):
+                tool=part.get('id')
+                outcome=part.get('state',{}).get('status')
+                if tool in self.tool_events and outcome in {'completed','error','failed'}:
+                    self.finish(self.session_id,self.segment_id,self.tool_events.pop(tool),
+                                'completed' if outcome=='completed' else 'failed')

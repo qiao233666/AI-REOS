@@ -21,8 +21,11 @@ SCHEMAS = {
     'execution-report': ({'segment_id', 'artifact_id'}, set()),
     'execution-decide': ({'segment_id', 'review_id', 'decision', 'reason'}, set()),
     'add-artifact': ({'task_id', 'path', 'title'}, set()),
-    'review': ({'item_id', 'verdict', 'method', 'checks', 'expected_revision'}, {'attempt_id'}),
+    'review': ({'item_id', 'verdict', 'method', 'checks', 'expected_revision'}, {'attempt_id','provenance'}),
     'checkpoint': ({'task_id', 'progress', 'next_step', 'expected_revision'}, {'pending', 'references'}),
+    'stop-task': ({'task_id','summary'}, set()),
+    'prepare-external-review': ({'task_id','materials','question','model','effort','authorization'}, {'case_id'}),
+    'run-external-review': ({'package_id','executable'}, {'timeout','attempt_id'}),
     'request-decision': ({'task_id', 'key', 'question'}, {'context'}),
     'resolve-decision': ({'decision_id', 'expected_revision', 'answer'}, {'resolution'}),
     'task-attention': ({'task_id'}, {'max_chars', 'offset', 'expected_snapshot'}),
@@ -94,6 +97,9 @@ def _task_for(tx, body):
     if 'segment_id' in body:
         segment = typed(tx, body['segment_id'], 'execution_segment')
         return typed(tx, segment['data']['task'], 'task'), segment
+    if 'package_id' in body:
+        package=typed(tx,body['package_id'],'external_package')
+        return typed(tx,package['data']['task'],'task'),None
     key = 'item_id' if 'item_id' in body else ('decision_id' if 'decision_id' in body else 'identifier')
     obj = tx.get(body[key])
     if obj['kind'] == 'task':
@@ -119,7 +125,7 @@ def validate_input(root, session_id, command, body):
         stages = control._segments(tx, task['id'])
         latest = stages[-1] if stages else None
         review_commands = {'execution-materials', 'execution-decide', 'review',
-                           'get', 'task-attention', 'resolve-decision'}
+                           'get', 'task-attention', 'resolve-decision','prepare-external-review','run-external-review'}
         if segment and command != 'get' and (not latest or latest['id'] != segment['id'] or
                         (segment['data']['session_id'] != session_id and command not in review_commands)):
             raise FrameworkError('恢复输入不属于当前会话的最新执行段')
@@ -167,7 +173,7 @@ def validate_input(root, session_id, command, body):
             _text(body['purpose']); _text(body['expected'])
         elif command == 'execution-report':
             policy = control._policy(tx, task['id'])
-            control._base(tx, task['id'], policy)
+            control._base(tx, task['id'], policy,archival=True)
             if segment['data']['status'] not in {'active', 'submitted', 'hold'}:
                 raise FrameworkError('该段不能重报')
             control._report_body(tx, segment, task, policy, typed(tx, body['artifact_id'], 'item'))
@@ -200,6 +206,20 @@ def validate_input(root, session_id, command, body):
                 raise FrameworkError('未决说明须为有限文本')
             if 'references' in body and (not isinstance(body['references'], list) or len(body['references']) > 8):
                 raise FrameworkError('接续引用须为最多8项的数组')
+        elif command == 'stop-task':
+            _text(body['summary'],500)
+        elif command == 'prepare-external-review':
+            for field in ('question','model','effort','authorization'):_text(body[field])
+            if not isinstance(body['materials'],list) or not 1<=len(body['materials'])<=128:
+                raise FrameworkError('审核材料须为有限清单')
+            for path in body['materials']:
+                relative=inputs.canonical_path(store.root,path)
+                if any(part.startswith('.') for part in Path(relative).parts):
+                    raise FrameworkError('审核材料不能读取隐藏控制目录')
+        elif command == 'run-external-review':
+            _text(body['executable'])
+            if 'timeout' in body and (type(body['timeout']) not in {int,float} or not 0<body['timeout']<=3600):
+                raise FrameworkError('兼容外审执行参数不合法')
         elif command == 'request-decision':
             _text(body['key'], 100); _text(body['question'], 2000)
             if 'context' in body and (not isinstance(body['context'], str) or len(body['context']) > 4000):
@@ -257,7 +277,7 @@ def report_path(root, session_id, body):
         stages = control._segments(tx, data['task'])
         if stages[-1]['id'] != segment['id']: raise FrameworkError('旧段不能写恢复报告')
         policy = control._policy(tx, data['task'])
-        task = control._base(tx, data['task'], policy)
+        task = control._base(tx, data['task'], policy,archival=True)
         for entry in body.get('criteria', []):
             _fields(entry, {'criterion', 'state', 'evidence', 'remaining'})
             if not isinstance(entry['remaining'], str) or len(entry['remaining']) > 4000:

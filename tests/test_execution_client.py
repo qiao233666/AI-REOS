@@ -66,7 +66,8 @@ class ExecutionClientTests(unittest.TestCase):
     def review_parameters(self, segment, verdict):
         current=self.owner.store.get(segment['id'])
         return dict(item_id=current['data']['report']['id'], expected_revision=current['data']['report']['rev'],
-                    verdict=verdict, method='项目既定审核渠道', checks=['按原任务及准确文件核对进展与缺口'])
+                    verdict=verdict, method='项目既定审核渠道', checks=['按原任务及准确文件核对进展与缺口'],
+                    provenance=fixtures.review_provenance(self,self.owner.store.get(current['data']['report']['id'])))
 
     def recover_report(self, segment, body):
         path=execution_recovery.report_path(self.root,'s1',body)
@@ -98,6 +99,8 @@ class ExecutionClientTests(unittest.TestCase):
             max_tools=1,max_seconds=120),'owner')
         segment=self.invoke('execution-begin',dict(task_id=self.task['id'],session_id='s1',criteria=['A1'],purpose='检查实现',expected='可核查进展'),'worker')
         self.assertEqual(0,self.event('Read',{'file_path':'out/one.txt'},'last-budget')[0])
+        self.assertEqual(0,client_guard.handle(self.root,'PostToolUse',dict(session_id='s1',
+            tool_use_id='last-budget',tool_name='Read',tool_input={'file_path':'out/one.txt'}))[0])
         self.assertEqual(2,self.event('Write',{'file_path':'out/science.py','content':'arbitrary computation'},'over-budget')[0])
         submitted=self.recover_report(segment,self.body(segment))
         packet=self.invoke('execution-materials',{'segment_id':segment['id']})

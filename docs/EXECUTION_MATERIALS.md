@@ -9,3 +9,7 @@
 可选的只读ExecutionMaterials(store).packet(segment_id, max_bytes=262144)及CLI execution-materials汇集完整任务合同、UTF-8任务原件、准确阶段报告和证据文件。它不写审核记录、不产生裁定、不调用模型。原件不能完整装入预算时明确失败，过大或非文本证据给出准确快照、摘要与requires_read定位，不把材料包生成当作已经审核。
 
 原任务覆盖、证据类别真实性及科学判断由项目既有审核执行。框架不保证审核者必然读懂文件，也不会把一个物理证据标签自动当成真实FE/RCWA结果。
+
+后续整链修正：受管阶段材料已接入原prepare-external-review。原run-external-review保留正式external_run身份，项目适配沿aiops.dispatch使用原模型、权限和授权。review/record-reviews的provenance只携带该既有运行ID，原method/checks和意见语义保留。执行控制核对准确原件/合同/报告、实际stdin和完成证据，固定轨迹摘要；整改新报告清除旧裁定。不能从一个普通目录声称“这里有审核日志”就发放下一段。
+
+这是派发材料和运行身份的衔接，不新增审核员、审核渠道、报告JSON或子代理项目级审核。真实提供方、新ZCode会话和重载MCP的整体宿主验收仍未完成。
