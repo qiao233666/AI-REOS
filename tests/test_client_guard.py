@@ -1,5 +1,6 @@
 """客户端每轮先检索；完成记录不代替开工收据或科学审核。"""
 import copy
+import gc
 import importlib
 import json
 from pathlib import Path
@@ -17,7 +18,8 @@ class ClientGuardTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / 'project'
+        self.addCleanup(gc.collect)
+        self.root = (Path(self.temp.name) / 'project').resolve()
         Store.initialize(self.root)
         folder = self.root / 'aiops/aireos'
         folder.mkdir(parents=True)

@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime, timedelta, timezone
 import io
+import gc
 import json
 import sqlite3
 import tempfile
@@ -21,7 +22,8 @@ class ExecutionControlTests(unittest.TestCase):
         self.control_type = ExecutionControl
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name) / 'project'
+        self.addCleanup(gc.collect)
+        self.root = (Path(self.temp.name) / 'project').resolve()
         init = Store.initialize(self.root)
         self.owner = Project(self.root, Path(init['credential_file']).read_text().strip())
         self.worker = self.actor('worker', ['execute', 'review'])
