@@ -128,6 +128,10 @@ python -m aireos --project PROJECT execution-invalidate --input invalidate.json
 
 宿主调用admit默认track=true；真实PostToolUse/PostToolUseFailure或原生工具终态调用finish，缺失或unknown不清除在途。superagent排队子包通过start_work与finish衔接同一在途记录；report/decide和admit采用同一锁序，未结束工作不能跨过冻结报告的边界。track=false只供不实际执行工具的可信单元调用，不得用于运行宿主。
 
+ZCode已安装宿主的权限拒绝、其他前置hook拒绝、参数更新验证失败可在PreToolUse之后直接返回，没有PostToolUseFailure。该宿主应在受保护策略的execution中配置`"host_tool_state":"zcode-sqlite"`：在下一次工具准入或Stop之前，只读固定用户目录`.zcode/cli/db/db.sqlite`的原生tool_usage表，以准确session_id和tool_call_id对账。只有completed/error/cancelled加非空有效completed_at才能结束对应工具；时间须为整数毫秒、不早于正式段开始、不晚于当前UTC加1000毫秒。原生身份仍依赖宿主session/tool_call唯一键，并非单次准入时间验证。仅approval_status=denied、仍running、时间缺失、跨会话或未知不清理，子代理排队也不由该表清理。数据库路径不接受模型或hook参数替换，不读取工具正文、不写宿主数据库、不重发工具预算。接口丢失或不兼容保留在途并阻断；Stop异常明确返回decision=block。
+
+原生表结构可读和六事件配置齐全都不等于模型整链已验收。`client-adapter-check`分别返回configuration_ready和execution_runtime_ready，静态检查不会自动把后者变为true。已核验的ZCode 3.18.2 Stop最多请求三次继续，不能把Stop钩子描述成无限强制执行或原任务完成证明；本轮退出与正式完成仍分开判断。宿主升级须重新核验事件、ID和表字段兼容性。
+
 完成和正向验收证据消费原Project状态中的否定、撤回和争议，不要求每份候选材料增加一轮审核。来源失效时允许归档全部原验收的非satisfied报告及原checkpoint/stop-task；waiting_ready只表示可明确未完成地交还用户，不给予pass、续期或科学完成。待决、失效接续和撤销记录均核对；新输入撤销的旧交接不能复用。
 
 执行阶段审核仍沿用既有review/record-reviews与method/checks；可选provenance仅引用原渠道实际external_run身份。受管执行段放行核对该运行的固定原件、准确报告、真实stdin、完成事件及报告快照；普通输出目录的自制日志不能作为已派发证明。原prepare-external-review自动从正式段生成完整材料，不能只用执行者question缩小审核；项目有aiops/review/cli.py时，原run-external-review通过既有aiops.dispatch调用项目渠道，沿用原授权和日志。运行资料留在受保护的治理运行目录。意见仍需原有角色独立核查，程序不从自然语言报告自动制造通过。

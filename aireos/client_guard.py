@@ -37,6 +37,8 @@ def policy(root):
     execution=value.get('execution',{})
     if not isinstance(execution,dict) or type(execution.get('enabled',False)) is not bool:
         raise FrameworkError('执行段策略须明确enabled布尔值')
+    if execution.get('host_tool_state') not in {None,'zcode-sqlite'}:
+        raise FrameworkError('原生工具终态接口尚未适配，不能静默忽略')
     return value
 
 
@@ -273,6 +275,10 @@ def _execution(root,event,payload,config,session_id):
     from .execution_control import ExecutionControl
     from .storage import Store
     control=ExecutionControl(Store(root))
+    if (event in {'PreToolUse','Stop'}
+            and config['execution'].get('host_tool_state')=='zcode-sqlite'):
+        from .zcode_state import reconcile
+        reconcile(control,session_id)
     if event in {'PostToolUse','PostToolUseFailure'}:
         key=payload.get('tool_use_id') or payload.get('tool_call_id')
         with control._cache() as cache:
@@ -388,7 +394,10 @@ def handle(root, event, payload):
             return 0, {'decision': 'block', 'reason': reason}, ''
         return 2, None, reason
     except Exception as exc:
-        return 2, None, '治理检索前置未通过：' + str(exc)
+        reason='治理检索前置未通过：' + str(exc)
+        if event=='Stop':
+            return 0,{'decision':'block','reason':reason},''
+        return 2, None, reason
 
 
 def zcode_config(root, python, script, existing=None):
@@ -417,6 +426,7 @@ def check_adapter(root):
     config = policy(root)
     result = {'enabled': config.get('enabled', False), 'errors': [],
               'coverage': '仅ZCode配置检查；运行时仍须新会话验证；未接入客户端无此保障'}
+    result.update(configuration_ready=False,execution_runtime_ready=False)
     if not result['enabled']:
         return result
     try:
@@ -451,8 +461,20 @@ def check_adapter(root):
         for name, expected in config.get('readonly_files', {}).items():
             if hashlib.sha256(_inside(root, name).read_bytes()).hexdigest() != expected:
                 result['errors'].append('旧账本保护基线变化，须归档核对：' + name)
+        if config.get('execution',{}).get('enabled',False):
+            if config['execution'].get('host_tool_state')!='zcode-sqlite':
+                result['errors'].append('执行接入缺少原生工具终态对账；权限拒绝可能没有PostToolUseFailure')
+            else:
+                from .zcode_state import check_native_store
+                result['native_tool_state']=check_native_store()
+                if not result['native_tool_state']['available']:
+                    result['errors'].append('原生工具终态接口不可用')
+            result['execution_limits']=['配置及表结构通过不代表真实会话完成验收',
+                'ZCode Stop续行有宿主次数上限；任务是否完成须由正式状态确认',
+                '未隔离shell仍拒绝，不能声明任意科研脚本已接入']
     except (OSError, ValueError, TypeError) as exc:
         result['errors'].append('客户端适配无法核对：' + str(exc))
+    result['configuration_ready']=not result['errors']
     return result
 
 

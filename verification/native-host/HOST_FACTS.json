@@ -1,0 +1,61 @@
+{
+  "installed_version": "3.18.2",
+  "installed_bundle_sha256": "08726b5ef69e1e9072828baa4656713cb3aac93bb096938681278c5600312b2c",
+  "facts": {
+    "installed_supported_hook_events": [
+      "SessionStart",
+      "UserPromptSubmit",
+      "PreToolUse",
+      "PermissionRequest",
+      "PostToolUse",
+      "PostToolUseFailure",
+      "Stop"
+    ],
+    "candidate_six_events_supported": true,
+    "tool_use_id_equals_native_tool_call_id": true,
+    "hook_session_id_equals_native_session_id": true,
+    "completed_at_source_type": "javascript_number",
+    "completed_at_unit": "unix_epoch_milliseconds",
+    "completed_at_source": "recordToolUsageFromResult: t.completedAt.getTime()",
+    "native_completed_at_column": "INTEGER NULLABLE",
+    "native_schema_is_strict_sqlite": false,
+    "permission_deny_may_omit_post_hook": true,
+    "later_hook_deny_may_omit_post_hook": true,
+    "updated_input_validation_failure_may_omit_post_hook": true,
+    "normal_result_settlement_records_early_return_results": true,
+    "hook_transcript_is_complete_session_transcript": false,
+    "stop_continuation_maximum": 3,
+    "native_key": [
+      "session_id",
+      "tool_call_id"
+    ],
+    "native_terminal_statuses": [
+      "completed",
+      "error",
+      "cancelled"
+    ],
+    "precise_lookup_index": "tool_usage_session_tool_call_idx"
+  },
+  "verification": {
+    "bundle_syntax_check": "pass",
+    "extracted_installed_serializer_cases": 7,
+    "extracted_result_writer_cases": 4,
+    "extracted_sql_binding_check": "pass",
+    "real_database_schema_read_only": "pass",
+    "real_database_rows_read": false,
+    "model_calls": 0,
+    "full_cli_loaded": false,
+    "production_config_modified": false,
+    "global_mcp_started": false,
+    "runtime_hook_dispatch_tested": false,
+    "model_end_to_end_accepted": false
+  },
+  "limits": [
+    "配置完整、原生接口可用与真实会话运行验收必须区分。",
+    "只按可信hook中的真实session/tool ID对照；必须有明确终态及可信完成时间。",
+    "未命中、时间缺失、schema漂移、存储失败或崩溃都维持未知，不盲标失败。",
+    "只凭approval_status=denied或缺乏完成时间的status=error不能清在途。",
+    "原生时间由Date.getTime产生毫秒number，但非STRICT SQLite读取仍须核实际类型。",
+    "MCP包装只覆盖自己的工具，标准桥未显式传原工具toolCallId，不能信模型填写绑定。"
+  ]
+}
