@@ -1,5 +1,6 @@
 """执行控制复用既有质量状态和任务范围；不把同用户shell当沙箱。"""
 from pathlib import Path
+import os
 from .errors import FrameworkError, PermissionDenied
 from .project import Project
 from .storage import within
@@ -7,6 +8,36 @@ from .storage import within
 
 CONTROL = {'.aireos', '.git', '.zcode', '.codex', '.claude', '.opencode', 'vendor'}
 CONTROL_FILES = {'agents.md', 'aiops/charter.md', 'aiops/policy.yaml'}
+
+
+def _relative(base,target):
+    try:
+        relative=target.resolve().relative_to(base).as_posix()
+    except ValueError:
+        raise PermissionDenied('工具路径越出正式项目根') from None
+    parts=[p.casefold() for p in Path(relative).parts]
+    if any(p in CONTROL for p in parts) or relative.casefold() in CONTROL_FILES or relative.casefold().startswith('aiops/aireos/'):
+        raise PermissionDenied('普通执行不能读写控制目录、运行配置或凭据')
+    return relative
+
+
+def _search_tree(base,target):
+    """宿主未提供受信排除器时，搜索范围不能覆盖控制后代；只查名称，不读正文。"""
+    pending=[target];seen=set();count=0
+    while pending:
+        current=pending.pop();resolved=current.resolve()
+        if resolved in seen:continue
+        seen.add(resolved);_relative(base,current)
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    count+=1
+                    if count>10000:
+                        raise PermissionDenied('递归范围无法在有限检查内排除控制路径；请指定更小目录或准确文件')
+                    child=Path(entry.path);_relative(base,child)
+                    if entry.is_dir(follow_symlinks=True):pending.append(child)
+        except OSError:
+            raise PermissionDenied('递归范围无法完整核对；请指定可读子目录或准确文件') from None
 
 
 def tool_scope(root, task, name, values):
@@ -25,21 +56,15 @@ def tool_scope(root, task, name, values):
             paths.append(values[key])
     if isinstance(values.get('resources'), list):
         paths.extend(values['resources'])
-    if not paths:
-        if action in writes:
-            raise PermissionDenied('写工具必须提供宿主实际使用的准确路径')
-        return
     base = Path(root).resolve()
+    if not paths:
+        if action in {'grep','glob','list'}:paths=[str(base)]
+        else:raise PermissionDenied('工具必须提供宿主实际使用的准确路径')
     for raw in paths:
         target = Path(raw)
         target = target if target.is_absolute() else base / target
-        try:
-            relative = target.resolve().relative_to(base).as_posix()
-        except ValueError:
-            raise PermissionDenied('工具路径越出正式项目根') from None
-        parts = [p.casefold() for p in Path(relative).parts]
-        if any(p in CONTROL for p in parts) or relative.casefold() in CONTROL_FILES or relative.casefold().startswith('aiops/aireos/'):
-            raise PermissionDenied('普通执行不能读写控制目录、运行配置或凭据')
+        relative=_relative(base,target)
+        if action in {'grep','glob','list'} and target.is_dir():_search_tree(base,target)
         if action in writes and not any(within(relative, out) for out in task['data']['contract']['outputs']):
             raise PermissionDenied('写入不在正式任务输出范围')
 

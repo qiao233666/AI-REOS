@@ -320,8 +320,18 @@ def _execution(root,event,payload,config,session_id):
         event_id=payload.get('tool_use_id') or payload.get('tool_call_id')
         if not event_id:
             return 2,None,'真实宿主未提供tool_use_id/tool_call_id；无法安全计数，不放行。'
+        values=dict(payload.get('tool_input') or {})
+        # 按宿主真实cwd解释路径；不修改交还宿主执行的原工具输入。
+        for field in ('file_path','path'):
+            if isinstance(values.get(field),str):
+                values[field]=str(_tool_path(root,payload,values[field]))
+        if isinstance(values.get('resources'),list):
+            values['resources']=[str(_tool_path(root,payload,value)) for value in values['resources']]
+        if (str(payload.get('tool_name','')).lower() in {'grep','glob','list'}
+                and not any(field in values for field in ('file_path','path','resources'))):
+            values['path']=str(_tool_path(root,payload,'.'))
         result=control.admit(session_id=session_id,segment_id=current.get('segment_id'),
-            tool_name=payload.get('tool_name'),tool_input=payload.get('tool_input') or {},event_id=event_id,track=True)
+            tool_name=payload.get('tool_name'),tool_input=values,event_id=event_id,track=True)
         if not result.get('allowed') or result.get('replayed'):
             from .execution_recovery import input_path
             example=input_path(root,session_id,'execution-status')

@@ -142,7 +142,7 @@ class ExecutionControlTests(unittest.TestCase):
         (self.root / 'out/code.py').write_text('# 已获准第二段正常迭代\n', encoding='utf-8')
         self.assertTrue(self.host.status(self.task['id'], 's1')['allowed'])
         (self.root / '.aireos/objects' / old_code['data']['blob']).write_bytes(b'broken old snapshot')
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'corrupt-old-snapshot', segment_id=second['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'corrupt-old-snapshot', segment_id=second['id'])['allowed'])
 
     def test_policy_preserves_every_original_acceptance(self):
         policy = self.configure()
@@ -154,9 +154,9 @@ class ExecutionControlTests(unittest.TestCase):
     def test_budget_and_new_session_cannot_skip_review(self):
         self.configure()
         segment = self.begin()
-        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'e1', segment_id=segment['id'])['allowed'])
-        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'e2', segment_id=segment['id'])['allowed'])
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'e3', segment_id=segment['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'e1', segment_id=segment['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'e2', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'e3', segment_id=segment['id'])['allowed'])
         with self.assertRaises(FrameworkError):
             self.begin('s2', 'session-bypass')
 
@@ -298,7 +298,7 @@ class ExecutionControlTests(unittest.TestCase):
         segment = self.begin()
         blob = self.root / '.aireos/objects' / self.original['data']['blob']
         blob.write_bytes(b'broken snapshot')
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'bad-blob', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'bad-blob', segment_id=segment['id'])['allowed'])
 
     def test_foreign_producer_cannot_report_for_executor(self):
         self.configure()
@@ -313,10 +313,10 @@ class ExecutionControlTests(unittest.TestCase):
         self.configure()
         segment = self.begin()
         artifact = self.submit_report(segment)
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'submitted-tool', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'submitted-tool', segment_id=segment['id'])['allowed'])
         review = self.review(artifact, 'fail')
         self.decide.decide(segment['id'], review['id'], 'hold', '停止', 'hold')
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'hold-tool', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'hold-tool', segment_id=segment['id'])['allowed'])
 
     def test_exact_replay_does_not_charge_or_bypass_revocation(self):
         self.configure(max_tools=1)
@@ -335,20 +335,20 @@ class ExecutionControlTests(unittest.TestCase):
     def test_cross_session_and_late_old_event_cannot_charge_new_segment(self):
         self.configure()
         first = self.begin()
-        self.assertFalse(self.admit_without_tool_execution('other', 'read', {}, 'wrong-session', segment_id=first['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('other', 'read', {'file_path': 'spec.txt'}, 'wrong-session', segment_id=first['id'])['allowed'])
         self.advance(first)
         second = self.begin('s1', 'second')
-        late = self.admit_without_tool_execution('s1', 'read', {}, 'late', segment_id=first['id'])
+        late = self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'late', segment_id=first['id'])
         self.assertFalse(late['allowed'])
         self.assertEqual(0, self.host.status(self.task['id'], 's1')['used'])
-        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'second-first', segment_id=second['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'second-first', segment_id=second['id'])['allowed'])
 
     def test_atomic_counter_across_host_instances(self):
         self.configure(max_tools=2)
         segment = self.begin()
         with ThreadPoolExecutor(max_workers=6) as pool:
             results = list(pool.map(lambda i: self.control_type(Store(self.root)).admit(
-                's1', 'read', {}, 'parallel-' + str(i), segment_id=segment['id']), range(6)))
+                's1', 'read', {'file_path': 'spec.txt'}, 'parallel-' + str(i), segment_id=segment['id']), range(6)))
         self.assertEqual(2, sum(result['allowed'] for result in results))
         self.assertEqual(2, self.host.status(self.task['id'], 's1')['used'])
 
@@ -359,20 +359,20 @@ class ExecutionControlTests(unittest.TestCase):
         with patch('aireos.execution_control.datetime') as clock:
             clock.now.return_value = future
             clock.fromisoformat.side_effect = datetime.fromisoformat
-            self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'expired', segment_id=segment['id'])['allowed'])
+            self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'expired', segment_id=segment['id'])['allowed'])
         pending = self.worker.request_decision(self.task['id'], 'scope', '需要新授权吗', 'pending')
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'pending-event', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'pending-event', segment_id=segment['id'])['allowed'])
         self.decider.resolve_decision(pending['id'], 1, '仅按原合同', 'answer')
-        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'after-answer', segment_id=segment['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'after-answer', segment_id=segment['id'])['allowed'])
         (self.root / 'spec.txt').write_text('输入变化', encoding='utf-8')
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'changed-input', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'changed-input', segment_id=segment['id'])['allowed'])
 
     def test_original_change_blocks_status_admission_and_next_segment(self):
         self.configure()
         segment = self.begin()
         (self.root / 'out/original.txt').write_text('替换原件', encoding='utf-8')
         self.assertFalse(self.host.status(self.task['id'], 's1')['allowed'])
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'changed-original', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'changed-original', segment_id=segment['id'])['allowed'])
 
     def test_lost_counter_is_not_reinitialized_by_begin_replay(self):
         self.configure()
@@ -381,7 +381,7 @@ class ExecutionControlTests(unittest.TestCase):
         with sqlite3.connect(database) as connection:
             connection.execute('DELETE FROM counters')
         self.begin()
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'lost-counter', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'lost-counter', segment_id=segment['id'])['allowed'])
 
     def test_unavailable_cache_fails_closed_and_does_not_update_formal_facts(self):
         self.configure()
@@ -390,7 +390,7 @@ class ExecutionControlTests(unittest.TestCase):
         database = self.root / '.aireos/cache/execution-control.sqlite3'
         database.write_bytes(b'corrupted operation cache')
         self.assertFalse(self.host.status(self.task['id'], 's1')['allowed'])
-        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {}, 'cache-bad', segment_id=segment['id'])['allowed'])
+        self.assertFalse(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'cache-bad', segment_id=segment['id'])['allowed'])
         self.assertEqual(before, len(self.owner.store.events()))
 
     def test_status_requires_exact_session_and_does_not_mutate(self):
@@ -411,7 +411,7 @@ class ExecutionControlTests(unittest.TestCase):
         self.configure()
         segment = self.begin()
         params = self.root / 'admission.json'
-        params.write_text(json.dumps(dict(session_id='s1', tool_name='read', tool_input={},
+        params.write_text(json.dumps(dict(session_id='s1', tool_name='read', tool_input={'file_path':'spec.txt'},
                                          event_id='cli', segment_id=segment['id'])), encoding='utf-8')
         output = io.StringIO()
         with redirect_stdout(output):
@@ -426,7 +426,7 @@ class ExecutionControlTests(unittest.TestCase):
     def test_completion_is_separate_from_spent_or_expired_tool_budget(self):
         self.configure(max_tools=1)
         segment = self.begin()
-        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {}, 'last-tool', segment_id=segment['id'])['allowed'])
+        self.assertTrue(self.admit_without_tool_execution('s1', 'read', {'file_path': 'spec.txt'}, 'last-tool', segment_id=segment['id'])['allowed'])
         self.complete(segment)
         status = self.host.status(self.task['id'], 's1')
         self.assertFalse(status['allowed'])

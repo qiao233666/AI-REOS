@@ -278,6 +278,10 @@ class ExecutionControl:
             raise StaleInput('须使用该报告准确版本的最新独立质量意见')
         if decision != 'hold' and data['verdict'] != 'pass':
             raise FrameworkError('继续或完成须有明确pass；拒绝意见只能进入hold')
+        if decision != 'hold':
+            # 报告本身也是续行/完成依据；既有已确认争议和撤回不能被旧pass遮蔽。
+            from .execution_safety import negative_basis
+            negative_basis(tx,typed(tx,data['target']['id'],'item'))
         from .review_trace import check
         trace=check(tx.store,data.get('provenance'),segment,self._policy(tx,segment['data']['task']),historical=historical_evidence)
         if segment['data'].get('review_trace') and trace!=segment['data']['review_trace']:
