@@ -88,7 +88,7 @@ def file_signature(info):
     return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
-def recheck_inventory(directory, paths, directories, signatures, deadline, ignored=()):
+def recheck_inventory(directory, paths, directories, signatures, deadline, ignored=(), verified=None):
     """在同一预算内复查覆盖及已读文件；这不提供原子文件系统快照。"""
     try:
         final, final_directories, skipped = inventory(directory, deadline, ignored=ignored)
@@ -96,8 +96,11 @@ def recheck_inventory(directory, paths, directories, signatures, deadline, ignor
             skipped.append(dict(path="*", reason="采集期间普通文件或目录集合变化，快照覆盖不完整"))
         for path, expected in signatures.items():
             check_deadline(deadline)
-            if file_signature(path.lstat()) != expected:
+            info = path.lstat()
+            if linked(info) or not stat.S_ISREG(info.st_mode) or file_signature(info) != expected:
                 skipped.append(dict(path=path.relative_to(directory).as_posix(), reason="读取后文件仍有变化，快照不完整"))
+            elif verified is not None:
+                verified.add(path.relative_to(directory).as_posix())
         return skipped
     except OSError as exc:
         return [dict(path="*", reason="末次覆盖检查失败: " + str(exc))]
@@ -155,9 +158,10 @@ def capture(store, relative, terminal, priority_paths=()):
             check_deadline(deadline)
         except (OSError, FrameworkError) as exc:
             skipped.append(dict(path=name, reason=str(exc)))
-    skipped.extend(recheck_inventory(directory, paths, directories, signatures, deadline))
+    verified = set()
+    skipped.extend(recheck_inventory(directory, paths, directories, signatures, deadline, verified=verified))
     manifest = dict(manifest_version=2, coverage="ordinary_tree", complete=terminal and not skipped,
-        terminal_confirmed=terminal, files=files,
+        terminal_confirmed=terminal, files=files, verified_files=sorted(verified & {entry['path'] for entry in files}),
         directories=sorted(path.relative_to(directory).as_posix() for path in directories), skipped=skipped,
         total_bytes=total, limits=dict(file_bytes=MAX_FILE_BYTES, total_bytes=MAX_TOTAL_BYTES, files=MAX_FILES,
             entries=MAX_ENTRIES, seconds=MAX_CAPTURE_SECONDS))

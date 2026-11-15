@@ -44,7 +44,7 @@ COMMANDS = READ_ONLY | set(PROJECT_COMMANDS) | set(EXECUTION_COMMANDS) | {
     "execution-admit", "execution-invalidate",
     "init", "grant", "claim-output", "takeover-output", "release-output",
     "register-resource", "reserve-resource", "finish-reservation",
-    "prepare-external-review", "run-external-review",
+    "prepare-external-review", "run-external-review", "recapture-external-review",
     "register-tool", "set-tool-enabled", "run-tool", "publish",
     "memory-configure", "deliver-batch", "record-reviews", "finalize-task", "restore-run",
     "history-configure", "import-history", "add-memory-note", "add-history-link", "prework-configure",
@@ -231,13 +231,14 @@ def _dispatch(args, params):
         }[command]
         return _call(method, params, args.request_id)
 
-    if command in {"prepare-external-review", "run-external-review"}:
+    if command in {"prepare-external-review", "run-external-review", "recapture-external-review"}:
         if "runner" in params:
             raise ValueError("runner是内部测试钩子，不能通过CLI指定")
         from .external_review import ExternalReview
         review = ExternalReview(store)
         method = {"prepare-external-review": review.prepare,
-                  "run-external-review": review.run}[command]
+                  "run-external-review": review.run,
+                  "recapture-external-review": review.recapture}[command]
         return _call(method, params, args.request_id)
 
     if command in {"register-tool", "set-tool-enabled", "run-tool", "restore-run"}:

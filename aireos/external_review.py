@@ -9,7 +9,7 @@ import subprocess
 import uuid
 
 from .errors import FrameworkError, StaleInput
-from .storage import digest, normalize_scope
+from .storage import canonical, digest, normalize_scope
 from .project import Project, typed, text_required
 
 MAX_EVENT_LINE_BYTES = 64 * 1024
@@ -22,7 +22,7 @@ def captured_delivery(store, evidence):
     reasons = []
     def saved(name):
         entry = entries.get(name)
-        if entry is None or name in skipped or "*" in skipped:
+        if entry is None or name in skipped or ("*" in skipped and name not in evidence.get('verified_files', [])):
             reasons.append(name + "未取得完整且稳定的预算内快照")
             return None, None
         content = store.blob(entry["blob"])
@@ -77,6 +77,58 @@ def invoke(argv, prompt, work, stdout, stderr, timeout):
 class ExternalReview:
     def __init__(self, store):
         self.store = store
+
+    def recapture(self, run_id, expected_revision, reason, request_id):
+        """补收已观察到退出0且原日志字节不变的交付，不调用提供方或抹除失败版本。"""
+        if type(expected_revision) is not int or expected_revision < 1:
+            raise FrameworkError('补收必须指定原失败运行的准确正整数版本')
+        text_required(reason, '补收理由')
+        def apply(tx):
+            run = typed(tx, run_id, 'external_run')
+            if run['rev'] != expected_revision:
+                raise StaleInput('待补收运行版本已变化')
+            data = run['data']
+            Project._scope_task(tx, data['task'])
+            if (data.get('status') != 'failed' or data.get('process_status') != 'exited'
+                    or type(data.get('exit_code')) is not int or data['exit_code'] != 0
+                    or data.get('delivery_status') != 'incomplete'):
+                raise FrameworkError('只能补收已观察到退出0的交付失败；终态未知或实际执行失败不能放行')
+            previous = data.get('evidence', {})
+            frozen = {key: value for key, value in previous.items() if key != 'manifest_blob'}
+            if self.store.blob(previous['manifest_blob']) != canonical(frozen).encode('utf-8'):
+                raise FrameworkError('原运行证据清单损坏，禁止补收')
+            original = {entry['path']: entry for entry in previous['files']}
+            critical = ('events.jsonl', 'report.md', 'stdin.txt')
+            if any(name not in original for name in critical):
+                raise FrameworkError('原运行没有完整保存关键日志，不能事后新增完成依据')
+            from .run_evidence import capture
+            evidence = capture(self.store, data['directory'], True, priority_paths=critical)
+            current = {entry['path']: entry for entry in evidence['files']}
+            skipped = {entry['path'] for entry in evidence['skipped']}
+            for name in critical:
+                if (name not in current or name not in evidence['verified_files'] or name in skipped
+                        or current[name] != original[name]):
+                    raise FrameworkError('关键日志变化、缺失或不稳定，禁止补收: ' + name)
+            delivery = captured_delivery(self.store, evidence)
+            if not (delivery['report_complete'] and delivery['events_complete']
+                    and delivery['completed_event'] and not delivery['failed_event']):
+                raise FrameworkError('原运行日志未证明完整交付，禁止补收')
+            package = typed(tx, data['package'], 'external_package')
+            stdin = self.store.blob(current['stdin.txt']['blob'])
+            if data.get('channel') == 'project-dispatch' and package['data'].get('execution'):
+                packet = json.loads(self.store.blob(package['data']['execution']['blob']))
+                matches = canonical(packet) in stdin.decode('utf-8')
+            else:
+                matches = stdin == self.store.blob(package['data']['prompt_blob'])
+            if not matches:
+                raise FrameworkError('实际stdin不符原固定审核材料，禁止补收')
+            return tx.replace(run_id, run['rev'], {**data, 'status': 'completed',
+                'delivery_status': 'completed', 'report_blob': delivery['report_blob'],
+                'evidence': evidence, 'delivery': delivery, 'partial': not evidence['complete'],
+                'delivery_recovery': {'previous': {'id': run_id, 'rev': run['rev']},
+                    'previous_manifest_blob': previous['manifest_blob'], 'reason': reason, 'models_called': False}})
+        return self.store.mutate('external.delivery.recapture',
+            {'run': run_id, 'expected_revision': expected_revision, 'reason': reason}, request_id, 'decide', apply)
 
     def prepare(self, task_id, materials, question, model, effort, authorization, request_id, case_id=None):
         for value, label in ((question, "审核问题"), (model, "请求模型"), (authorization, "此次材料外发授权依据")):
