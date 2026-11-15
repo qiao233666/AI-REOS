@@ -200,9 +200,6 @@ def _recovery(root, config, payload):
     try:
         tokens = _literal_tokens(command)
         raw_executable=tokens.pop(0)
-        executable = Path(raw_executable).name.lower()
-        if executable not in {'python', 'python.exe', 'python3', 'python3.exe'}:
-            return False
         if not _trusted_python(raw_executable):
             return False
         while tokens and tokens[0] in {'-B', '-X'}:
