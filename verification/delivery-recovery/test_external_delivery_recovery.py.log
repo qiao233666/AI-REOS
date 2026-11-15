@@ -1,0 +1,14 @@
+test_file_count_overflow_preserves_stable_delivery_and_partial_tree (test_external_delivery_recovery.ExternalDeliveryRecoveryTests) ... ok
+test_recapture_cannot_add_an_unfrozen_critical_file (test_external_delivery_recovery.ExternalDeliveryRecoveryTests) ... ok
+test_recapture_cannot_turn_failed_event_into_completed (test_external_delivery_recovery.ExternalDeliveryRecoveryTests) ... ok
+test_recapture_does_not_relax_file_or_total_byte_budget (test_external_delivery_recovery.ExternalDeliveryRecoveryTests) ... ok
+test_recapture_rejects_changed_report_events_or_stdin (test_external_delivery_recovery.ExternalDeliveryRecoveryTests) ... ok
+test_recapture_rejects_unchanged_but_unbound_stdin (test_external_delivery_recovery.ExternalDeliveryRecoveryTests) ... ok
+test_recapture_rejects_unknown_or_nonzero_process (test_external_delivery_recovery.ExternalDeliveryRecoveryTests) ... ok
+test_recapture_requires_decider_and_exact_revision (test_external_delivery_recovery.ExternalDeliveryRecoveryTests) ... ok
+test_recapture_uses_same_bytes_preserves_failure_and_never_calls_provider (test_external_delivery_recovery.ExternalDeliveryRecoveryTests) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 4.622s
+
+OK

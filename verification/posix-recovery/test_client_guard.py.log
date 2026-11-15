@@ -1,0 +1,19 @@
+test_bad_policy_during_new_prompt_cannot_revive_old_completion (test_client_guard.ClientGuardTests) ... ok
+test_checker_rejects_non_python_command_and_missing_fixed_entry (test_client_guard.ClientGuardTests) ... ok
+test_disabled_unconfigured_and_readonly_protection (test_client_guard.ClientGuardTests) ... ok
+test_emitted_recovery_command_runs_for_project_path_with_spaces (test_client_guard.ClientGuardTests) ... ok
+test_failed_query_never_unlocks_and_recovery_must_use_real_entry (test_client_guard.ClientGuardTests) ... ok
+test_installer_preserves_existing_guards_and_check_detects_missing_event (test_client_guard.ClientGuardTests) ... ok
+test_invalid_retry_revokes_previously_successful_completion (test_client_guard.ClientGuardTests) ... ok
+test_missing_session_empty_query_and_unknown_event_do_not_pass (test_client_guard.ClientGuardTests) ... ok
+test_new_turn_invalidates_old_completion_and_late_result_cannot_unlock (test_client_guard.ClientGuardTests) ... ok
+test_no_query_blocks_read_and_stop_but_bootstrap_is_available (test_client_guard.ClientGuardTests) ... ok
+test_project_isolation_and_session_reset (test_client_guard.ClientGuardTests) ... ok
+test_prompt_retrieves_native_records_and_allows_only_this_session (test_client_guard.ClientGuardTests) ... ok
+test_recovery_input_can_be_written_without_opening_arbitrary_writes (test_client_guard.ClientGuardTests) ... ok
+test_wrapper_load_failure_already_revoked_previous_turn (test_client_guard.ClientGuardTests) ... ok
+
+----------------------------------------------------------------------
+Ran 14 tests in 3.642s
+
+OK

@@ -14,8 +14,10 @@ from .project import Project, typed, text_required
 
 
 class ToolRegistry:
-    def __init__(self, store):
+    def __init__(self, store, runner=None):
         self.store = store
+        # 仅可信宿主注入；CLI参数不能选择任意runner或代码路径。
+        self.runner = runner
 
     def register(self, manifest, request_id):
         required = {"name", "version", "api", "entry", "purpose", "aliases", "inputs", "outputs", "owner", "limitations", "verification", "dependencies"}
@@ -86,13 +88,18 @@ class ToolRegistry:
             raise FrameworkError("本地工具超时范围为0至3600秒")
         from .recall import reference
         payload = dict(tool=tool_id, task=task_id, receipt=receipt_id, arguments=arguments, timeout=timeout)
+        runtime=getattr(self.runner,'description',None)
+        if runtime is not None:payload['runtime']=runtime
         def reserve(tx):
             Project._task_open(tx, task_id)
+            if self.runner is None and any(obj['data']['task']==task_id for obj in tx.list('execution_policy')):
+                raise FrameworkError('受管任务登记脚本须经已接入隔离的宿主runner，不允许旧非隔离路径')
             Project._fresh(tx, receipt_id, task_id)
             tool = self._validate(tx, tool_id)
             directory = ".aireos/runs/" + uuid.uuid4().hex
             return tx.create("run", dict(tool=reference(tool), task=task_id, arguments=arguments, timeout=timeout,
                 directory=directory, status="unknown", actor=tx.principal["actor"],
+                **({'runtime':runtime} if runtime is not None else {}),
                 note="调用已登记；进程是否开始或结束须以结果记录为准，重复请求不会重跑"))
         run = self.store.mutate("tool.run.reserve", payload, request_id, "execute", reserve)
         if run["_replayed"]:
@@ -108,7 +115,8 @@ class ToolRegistry:
         status, code, note = "unknown", None, ""
         try:
             with (directory / "stdout.log").open("wb") as stdout, (directory / "stderr.log").open("wb") as stderr:
-                result = subprocess.run(command, cwd=directory, stdout=stdout, stderr=stderr, timeout=timeout, shell=False)
+                invoke=self.runner or subprocess.run
+                result = invoke(command, cwd=directory, stdout=stdout, stderr=stderr, timeout=timeout, shell=False)
             code = result.returncode
             status = "completed" if code == 0 else "failed"
         except subprocess.TimeoutExpired:

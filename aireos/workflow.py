@@ -112,7 +112,7 @@ class Workflow:
             if item["data"]["task"] != task_id or "revision" not in entry:
                 raise FrameworkError("批量意见必须指明本任务产物及实际核查的准确版本")
             obj = self.project.review(entry["item_id"], entry["verdict"], entry["method"], entry["checks"],
-                self._request(request_id, "review:" + str(index)), expected_revision=entry["revision"], attempt_id=entry.get("attempt_id"))
+                self._request(request_id, "review:" + str(index)), expected_revision=entry["revision"], attempt_id=entry.get("attempt_id"), provenance=entry.get("provenance"))
             results.append(dict(id=obj["id"], rev=obj["rev"], item_id=entry["item_id"]))
             self._step(flow["id"], "review:" + str(index), obj, request_id, "review")
         return self._finish(flow, {"reviews": results}, request_id, "review")

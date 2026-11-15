@@ -1,0 +1,13 @@
+test_child_work_cannot_be_cleared_by_native_tool_table (test_zcode_state.ZCodeStateTests) ... ok
+test_hook_reconciles_before_governance_recovery_and_keeps_budget (test_zcode_state.ZCodeStateTests) ... ok
+test_invalid_or_out_of_segment_completion_times_remain_inflight (test_zcode_state.ZCodeStateTests) ... ok
+test_missing_or_incompatible_native_store_does_not_create_or_clear (test_zcode_state.ZCodeStateTests) ... ok
+test_native_denied_terminal_unblocks_report_but_does_not_complete_task (test_zcode_state.ZCodeStateTests) ... ok
+test_native_observer_does_not_open_store_without_pending_native_tools (test_zcode_state.ZCodeStateTests) ... ok
+test_native_store_failure_at_stop_is_an_explicit_block (test_zcode_state.ZCodeStateTests) ... ok
+test_running_missing_timestamp_and_foreign_session_do_not_clear_work (test_zcode_state.ZCodeStateTests) ... ok
+
+----------------------------------------------------------------------
+Ran 8 tests in 3.661s
+
+OK

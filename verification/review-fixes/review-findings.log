@@ -1,0 +1,12 @@
+test_confirmed_prior_report_dispute_blocks_current_stage (test_execution_review_findings.ReviewFindingsTests) ... ok
+test_confirmed_report_dispute_revokes_completion (test_execution_review_findings.ReviewFindingsTests) ... ok
+test_disputed_report_still_allows_explicit_unfinished_hold (test_execution_review_findings.ReviewFindingsTests) ... ok
+test_hook_allows_actual_nested_output_path (test_execution_review_findings.ReviewFindingsTests) ... ok
+test_hook_uses_host_cwd_for_relative_write (test_execution_review_findings.ReviewFindingsTests) ... ok
+test_recursive_search_cannot_enter_control_descendants (test_execution_review_findings.ReviewFindingsTests) ... ok
+test_recursive_search_in_plain_scientific_directory_remains_available (test_execution_review_findings.ReviewFindingsTests) ... ok
+
+----------------------------------------------------------------------
+Ran 7 tests in 5.636s
+
+OK

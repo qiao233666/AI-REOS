@@ -1,0 +1,45 @@
+test_atomic_counter_across_host_instances (test_execution_control.ExecutionControlTests) ... ok
+test_budget_and_new_session_cannot_skip_review (test_execution_control.ExecutionControlTests) ... ok
+test_changed_evidence_version_or_bytes_cannot_be_used (test_execution_control.ExecutionControlTests) ... ok
+test_claim_is_not_file_evidence (test_execution_control.ExecutionControlTests) ... ok
+test_cli_routes_real_store_without_host_credentials (test_execution_control.ExecutionControlTests) ... ok
+test_code_change_before_next_begin_is_not_historical_permission (test_execution_control.ExecutionControlTests) ... ok
+test_complete_requires_all_classes_and_independent_review (test_execution_control.ExecutionControlTests) ... ok
+test_completed_for_other_session_or_invalidated_input_cannot_stop_new_request (test_execution_control.ExecutionControlTests) ... ok
+test_completed_label_alone_does_not_replace_all_satisfied_evidence (test_execution_control.ExecutionControlTests) ... ok
+test_completion_is_separate_from_spent_or_expired_tool_budget (test_execution_control.ExecutionControlTests) ... ok
+test_completion_rejects_pending_contract_changes_and_missing_cache (test_execution_control.ExecutionControlTests) ... ok
+test_completion_requires_current_latest_independent_pass (test_execution_control.ExecutionControlTests) ... ok
+test_completion_revalidates_prior_report_and_independent_review (test_execution_control.ExecutionControlTests) ... ok
+test_completion_revalidates_report_and_current_evidence (test_execution_control.ExecutionControlTests) ... ok
+test_cross_session_and_late_old_event_cannot_charge_new_segment (test_execution_control.ExecutionControlTests) ... ok
+test_delete_acceptance_and_missing_physical_are_rejected (test_execution_control.ExecutionControlTests) ... ok
+test_exact_replay_does_not_charge_or_bypass_revocation (test_execution_control.ExecutionControlTests) ... ok
+test_expired_input_changed_and_pending_fail_closed (test_execution_control.ExecutionControlTests) ... ok
+test_foreign_producer_cannot_report_for_executor (test_execution_control.ExecutionControlTests) ... ok
+test_formal_task_closure_preserves_current_completion_but_not_tools (test_execution_control.ExecutionControlTests) ... ok
+test_handoff_rejects_cross_session_revoked_and_superseded_hold (test_execution_control.ExecutionControlTests) ... ok
+test_handoff_revalidates_latest_evidence_and_exact_independent_review (test_execution_control.ExecutionControlTests) ... ok
+test_historical_evidence_snapshot_corruption_still_blocks_tools (test_execution_control.ExecutionControlTests) ... ok
+test_hold_cannot_resume_by_relabeling_identical_report_bytes (test_execution_control.ExecutionControlTests) ... ok
+test_hold_requires_revised_report_and_new_independent_review (test_execution_control.ExecutionControlTests) ... ok
+test_latest_rejection_blocks_older_pass_and_unrelated_review (test_execution_control.ExecutionControlTests) ... ok
+test_lost_counter_is_not_reinitialized_by_begin_replay (test_execution_control.ExecutionControlTests) ... ok
+test_next_approved_stage_can_iterate_code_and_complete_from_new_snapshot (test_execution_control.ExecutionControlTests) ... ok
+test_original_change_blocks_status_admission_and_next_segment (test_execution_control.ExecutionControlTests) ... ok
+test_policy_preserves_every_original_acceptance (test_execution_control.ExecutionControlTests) ... ok
+test_report_and_evidence_tampering_block_decision (test_execution_control.ExecutionControlTests) ... ok
+test_report_object_revision_change_blocks_old_independent_review (test_execution_control.ExecutionControlTests) ... ok
+test_review_revision_change_blocks_following_segment (test_execution_control.ExecutionControlTests) ... ok
+test_snapshot_corruption_is_not_hidden_by_unchanged_source_file (test_execution_control.ExecutionControlTests) ... ok
+test_status_requires_exact_session_and_does_not_mutate (test_execution_control.ExecutionControlTests) ... ok
+test_stopped_without_acceptance_cannot_become_completion (test_execution_control.ExecutionControlTests) ... ok
+test_submitted_and_hold_deny_tools (test_execution_control.ExecutionControlTests) ... ok
+test_unavailable_cache_fails_closed_and_does_not_update_formal_facts (test_execution_control.ExecutionControlTests) ... ok
+test_unknown_hold_can_handoff_with_pending_and_formal_stopping (test_execution_control.ExecutionControlTests) ... ok
+test_unknown_progress_can_continue_but_not_complete (test_execution_control.ExecutionControlTests) ... ok
+
+----------------------------------------------------------------------
+Ran 40 tests in 40.765s
+
+OK

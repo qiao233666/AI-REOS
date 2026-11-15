@@ -9,12 +9,13 @@ import re
 import shlex
 import shutil
 import sqlite3
+import sys
 import uuid
 
 from .errors import FrameworkError
 
 
-EVENTS = ('SessionStart', 'UserPromptSubmit', 'PreToolUse', 'Stop')
+EVENTS = ('SessionStart', 'UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Stop')
 POLICY = 'aiops/aireos/retrieval-policy.json'
 
 
@@ -33,6 +34,11 @@ def policy(root):
         raise FrameworkError('客户端启动文件及只读文件配置格式错误')
     for name in list(value.get('bootstrap_files', [])) + list(value.get('readonly_files', {})):
         _inside(root, name)
+    execution=value.get('execution',{})
+    if not isinstance(execution,dict) or type(execution.get('enabled',False)) is not bool:
+        raise FrameworkError('执行段策略须明确enabled布尔值')
+    if execution.get('host_tool_state') not in {None,'zcode-sqlite'}:
+        raise FrameworkError('原生工具终态接口尚未适配，不能静默忽略')
     return value
 
 
@@ -133,7 +139,7 @@ def context_text(root):
             'session-context无query只给导航，不能算完成检索。失败须修复后重新查询；不得退回grep替代。'
             '检索片段或已采纳状态不代替原文、完整覆盖或科学正确。新任务仍须prepare。'
             '旧账本只读，不追加新正式事实；新教训通过新版受管入口登记。'
-            '恢复入口：python -X utf8 "' + entry + '" client-context --input <含query和session_id的JSON>。'
+            '恢复入口："' + str(Path(sys.executable).resolve()).replace('\\', '/') + '" -X utf8 "' + entry + '" client-context --input <含query和session_id的JSON>。'
             '其他客户端只有明确接入并验证相同事件后才有程序保障。')
 
 
@@ -168,12 +174,22 @@ def _query_write(root, payload, session_id):
     if not isinstance(name,str) or _tool_path(root,payload,name)!=recovery_input(root,session_id):
         return False
     try:
-        body=json.loads(values.get('content',''))
+        from .execution_recovery import plain_target, decode
+        plain_target(root,Path(payload.get('cwd') or root)/name)
+        body=decode(values.get('content',''))
         return (isinstance(body,dict) and set(body)<={'query','session_id','max_chars'}
                 and body.get('session_id')==session_id and isinstance(body.get('query'),str)
                 and 0<len(body['query'].strip())<=16000)
-    except (ValueError,TypeError):
+    except (OSError,FrameworkError,ValueError,TypeError):
         return False
+
+
+def _literal_tokens(command):
+    """只接受纯字面参数，不能让shell在固定入口之前展开或执行内容。"""
+    if (not isinstance(command, str) or not command.strip()
+            or any(char in command for char in ';|&\r\n`<>$%!*?[]{}()^~#\x00')):
+        raise FrameworkError('治理恢复命令仅允许纯字面参数，拒绝变量、替换、通配及重定向')
+    return shlex.split(command.replace('\\', '/'))
 
 
 def _recovery(root, config, payload):
@@ -181,12 +197,10 @@ def _recovery(root, config, payload):
     if payload.get('tool_name') != 'Bash':
         return False
     command = (payload.get('tool_input') or {}).get('command', '')
-    if not isinstance(command, str) or any(char in command for char in ';|&\r\n`<>'):
-        return False
     try:
-        tokens = shlex.split(command.replace('\\', '/'))
-        executable = Path(tokens.pop(0)).name.lower()
-        if executable not in {'python', 'python.exe', 'python3', 'python3.exe'}:
+        tokens = _literal_tokens(command)
+        raw_executable=tokens.pop(0)
+        if not _trusted_python(raw_executable):
             return False
         while tokens and tokens[0] in {'-B', '-X'}:
             flag = tokens.pop(0)
@@ -195,9 +209,134 @@ def _recovery(root, config, payload):
         if len(tokens) != 4 or tokens[1:3] != ['client-context', '--input']:
             return False
         # 相对路径在cwd漂移后不作为恢复豁免；要求可核对的绝对固定入口。
-        return Path(tokens[0]).is_absolute() and Path(tokens[0]).resolve() == _inside(root, config['entry'])
+        if not (Path(tokens[0]).is_absolute() and Path(tokens[0]).resolve() == _inside(root, config['entry'])):
+            return False
+        if config.get('execution',{}).get('enabled',False):
+            from .execution_recovery import plain_target, decode
+            session = payload.get('session_id') or os.environ.get('CLAUDE_SESSION_ID')
+            path = plain_target(root, _tool_path(root, payload, tokens[3]))
+            if path != recovery_input(root, session) or not path.is_file() or path.stat().st_size > 65536:
+                return False
+            body = decode(path.read_text(encoding='utf-8'))
+            return (set(body) <= {'query','session_id','max_chars'} and body.get('session_id') == session
+                    and isinstance(body.get('query'), str) and 0 < len(body['query'].strip()) <= 16000)
+        return True
     except (ValueError, IndexError, FrameworkError):
         return False
+
+
+def _trusted_python(value):
+    # 不接受PATH别名或shell函数；实际启动的必须是此守卫的绝对解释器。
+    return Path(value).is_absolute() and Path(value).resolve()==Path(sys.executable).resolve()
+
+
+def _control_command(root, config, payload):
+    """执行段被阻断后只开放固定治理入口，不开放任意脚本/命令串。"""
+    if payload.get('tool_name')!='Bash':
+        return False
+    command=(payload.get('tool_input') or {}).get('command','')
+    try:
+        tokens=_literal_tokens(command)
+        if not _trusted_python(tokens.pop(0)):
+            return False
+        while tokens and tokens[0] in {'-B','-X'}:
+            flag=tokens.pop(0)
+            if flag=='-X' and (not tokens or tokens.pop(0)!='utf8'):
+                return False
+        entry=Path(tokens.pop(0))
+        if not entry.is_absolute() or entry.resolve()!=_inside(root,config['entry']):
+            return False
+        from .execution_recovery import SCHEMAS, command_input
+        command=tokens.pop(0)
+        if command not in SCHEMAS:
+            return False
+        # 参数必须为明确的成对参数；权限仍由正式CLI的作用域凭据核对。
+        valid = (len(tokens)%2==0 and all(tokens[i] in {'--input','--credential-file','--request-id'}
+                                      and tokens[i+1] and not tokens[i+1].startswith('-')
+                                      for i in range(0,len(tokens),2)))
+        if not valid or len(set(tokens[::2])) != len(tokens[::2]):
+            return False
+        options=dict(zip(tokens[::2],tokens[1::2]))
+        if '--input' not in options:
+            return False
+        session=payload.get('session_id') or os.environ.get('CLAUDE_SESSION_ID')
+        command_input(root,session,command,_tool_path(root,payload,options['--input']))
+        return True
+    except (OSError,ValueError,TypeError,IndexError,FrameworkError):
+        return False
+
+
+def _execution(root,event,payload,config,session_id):
+    if not config.get('execution',{}).get('enabled',False):
+        return 0,None,''
+    from .execution_control import ExecutionControl
+    from .storage import Store
+    control=ExecutionControl(Store(root))
+    if (event in {'PreToolUse','Stop'}
+            and config['execution'].get('host_tool_state')=='zcode-sqlite'):
+        from .zcode_state import reconcile
+        reconcile(control,session_id)
+    if event in {'PostToolUse','PostToolUseFailure'}:
+        key=payload.get('tool_use_id') or payload.get('tool_call_id')
+        with control._cache() as cache:
+            row=cache.execute('SELECT segment FROM inflight WHERE event=? AND session=?',(key,session_id)).fetchone()
+        if row:
+            control.finish(session_id,row['segment'],key,'failed' if event=='PostToolUseFailure' else 'completed')
+        return 0,None,''
+    if event=='PreToolUse' and payload.get('tool_name')=='Write':
+        values=payload.get('tool_input') or {}
+        name=values.get('file_path')
+        if isinstance(name,str):
+            raw=Path(payload.get('cwd') or root)/name
+            # 仅此命名空间可申请恢复豁免；科研输出仍须消耗普通工具预算。
+            candidate=('execution-reports' in raw.parts or raw.name.startswith('execution-input-'))
+            if candidate:
+                from .execution_recovery import write_allowed
+                if write_allowed(root,session_id,raw,values.get('content')):
+                    return 0,None,''
+                return 2,None,'恢复写入不在当前会话、正式任务和准确报告的派生路径内。'
+    if event=='PreToolUse' and _control_command(root,config,payload):
+        return 0,None,''
+    try:
+        current=control.status(session_id=session_id)
+    except FrameworkError as exc:
+        current={'allowed':False,'reasons':[str(exc)]}
+    reason='执行段不能继续：'+'；'.join(current.get('reasons',[]))
+    if event=='Stop':
+        if current.get('completion_ready') is True:
+            return 0,None,''
+        if current.get('handoff_ready') is True:
+            message='正式hold交接：原任务尚未完成，当前未知、失败或待决仍保留；本轮结束不授予续行或科学成功。'
+            return 0,{'systemMessage':message},''
+        if current.get('waiting_ready') is True:
+            return 0,{'systemMessage':'原任务尚未完成；按已有待决、来源失效接续或停止记录交还用户，不授予续行或完成。'},''
+        detail='；'.join(current.get('completion_reasons',[]))
+        handoff='；'.join(current.get('handoff_reasons',[]))
+        return 0,{'decision':'block','reason':reason+'；'+detail+'；'+handoff+'。请登记当前证据与缺口，并由项目既有审核意见决定hold交接、续行或完成。'},''
+    if event=='PreToolUse':
+        event_id=payload.get('tool_use_id') or payload.get('tool_call_id')
+        if not event_id:
+            return 2,None,'真实宿主未提供tool_use_id/tool_call_id；无法安全计数，不放行。'
+        values=dict(payload.get('tool_input') or {})
+        # 按宿主真实cwd解释路径；不修改交还宿主执行的原工具输入。
+        for field in ('file_path','path'):
+            if isinstance(values.get(field),str):
+                values[field]=str(_tool_path(root,payload,values[field]))
+        if isinstance(values.get('resources'),list):
+            values['resources']=[str(_tool_path(root,payload,value)) for value in values['resources']]
+        if (str(payload.get('tool_name','')).lower() in {'grep','glob','list'}
+                and not any(field in values for field in ('file_path','path','resources'))):
+            values['path']=str(_tool_path(root,payload,'.'))
+        result=control.admit(session_id=session_id,segment_id=current.get('segment_id'),
+            tool_name=payload.get('tool_name'),tool_input=values,event_id=event_id,track=True)
+        if not result.get('allowed') or result.get('replayed'):
+            from .execution_recovery import input_path
+            example=input_path(root,session_id,'execution-status')
+            return 2,None,('执行段未放行：'+'；'.join(result.get('reasons') or ['已处理工具事件不能再次执行'])
+                +'。可Write有限治理JSON到 '+str(example)+'（将末尾命令名替换为白名单命令）；'
+                '报告路径由execution-status的recovery.report_path给出，只能新建有限JSON草稿；'
+                '需保留全部原验收项，之后用add-artifact、execution-report和项目既有审核恢复。')
+    return 0,None,''
 
 
 def handle(root, event, payload):
@@ -207,6 +346,10 @@ def handle(root, event, payload):
             session = (payload.get('session_id') if isinstance(payload,dict) else None) or os.environ.get('CLAUDE_SESSION_ID')
             if session:
                 invalidate(root,session)
+                # 即使策略损坏，本轮新输入也不能复活旧执行资格。
+                from .execution_control import ExecutionControl
+                from .storage import Store
+                ExecutionControl(Store(root)).invalidate(session)
         config = policy(root)
         if not config.get('enabled'):
             return 0, None, ''
@@ -221,6 +364,10 @@ def handle(root, event, payload):
         if event == 'SessionStart':
             with _db(root) as connection:
                 connection.execute('DELETE FROM sessions WHERE session=?', (_session(session_id),))
+            if config.get('execution',{}).get('enabled',False):
+                from .execution_control import ExecutionControl
+                from .storage import Store
+                ExecutionControl(Store(root)).invalidate(session_id)
             return 0, {'hookSpecificOutput': {'hookEventName': event, 'additionalContext': context_text(root)}}, ''
         if event == 'UserPromptSubmit':
             # 长提示明确裁剪首尾；这不承诺覆盖整份输入或穷尽项目历史。
@@ -245,7 +392,7 @@ def handle(root, event, payload):
                 return 0, None, ''
         current = status(root, session_id)
         if current and current['packet'] and not current['error']:
-            return 0, None, ''
+            return _execution(root,event,payload,config,session_id)
         reason = ('本轮治理检索尚未成功完成，不能用旧轮次、旧STATE或grep替代。请用固定入口client-context恢复。'
                   '允许Write创建仅含query/session_id的恢复JSON：'+str(recovery_input(root,session_id)))
         if current and current.get('error'):
@@ -254,7 +401,10 @@ def handle(root, event, payload):
             return 0, {'decision': 'block', 'reason': reason}, ''
         return 2, None, reason
     except Exception as exc:
-        return 2, None, '治理检索前置未通过：' + str(exc)
+        reason='治理检索前置未通过：' + str(exc)
+        if event=='Stop':
+            return 0,{'decision':'block','reason':reason},''
+        return 2, None, reason
 
 
 def zcode_config(root, python, script, existing=None):
@@ -283,6 +433,7 @@ def check_adapter(root):
     config = policy(root)
     result = {'enabled': config.get('enabled', False), 'errors': [],
               'coverage': '仅ZCode配置检查；运行时仍须新会话验证；未接入客户端无此保障'}
+    result.update(configuration_ready=False,execution_runtime_ready=False)
     if not result['enabled']:
         return result
     try:
@@ -317,8 +468,20 @@ def check_adapter(root):
         for name, expected in config.get('readonly_files', {}).items():
             if hashlib.sha256(_inside(root, name).read_bytes()).hexdigest() != expected:
                 result['errors'].append('旧账本保护基线变化，须归档核对：' + name)
+        if config.get('execution',{}).get('enabled',False):
+            if config['execution'].get('host_tool_state')!='zcode-sqlite':
+                result['errors'].append('执行接入缺少原生工具终态对账；权限拒绝可能没有PostToolUseFailure')
+            else:
+                from .zcode_state import check_native_store
+                result['native_tool_state']=check_native_store()
+                if not result['native_tool_state']['available']:
+                    result['errors'].append('原生工具终态接口不可用')
+            result['execution_limits']=['配置及表结构通过不代表真实会话完成验收',
+                'ZCode Stop续行有宿主次数上限；任务是否完成须由正式状态确认',
+                '未隔离shell仍拒绝，不能声明任意科研脚本已接入']
     except (OSError, ValueError, TypeError) as exc:
         result['errors'].append('客户端适配无法核对：' + str(exc))
+    result['configuration_ready']=not result['errors']
     return result
 
 

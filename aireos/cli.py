@@ -12,7 +12,9 @@ from .storage import Store
 
 READ_ONLY = {"get", "list", "events", "status", "check-receipt", "check-finalize", "trace", "views-status", "memory-query", "run-evidence", "task-checkpoint",
     "history-query", "history-get", "history-read", "session-context", "reading-usage", "task-attention", "event-feed",
-    "client-context", "client-guard-status", "client-adapter-check"}
+    "client-context", "client-guard-status", "client-adapter-check", "execution-status", "execution-materials"}
+EXECUTION_COMMANDS = {"execution-configure": "configure", "execution-begin": "begin",
+    "execution-report": "report", "execution-decide": "decide"}
 PROJECT_COMMANDS = {
     "request-decision": "request_decision",
     "resolve-decision": "resolve_decision",
@@ -38,10 +40,11 @@ PROJECT_COMMANDS = {
     "annotate-stage": "annotate_stage",
     "stop-task": "stop_task",
 }
-COMMANDS = READ_ONLY | set(PROJECT_COMMANDS) | {
+COMMANDS = READ_ONLY | set(PROJECT_COMMANDS) | set(EXECUTION_COMMANDS) | {
+    "execution-admit", "execution-invalidate",
     "init", "grant", "claim-output", "takeover-output", "release-output",
     "register-resource", "reserve-resource", "finish-reservation",
-    "prepare-external-review", "run-external-review",
+    "prepare-external-review", "run-external-review", "recapture-external-review",
     "register-tool", "set-tool-enabled", "run-tool", "publish",
     "memory-configure", "deliver-batch", "record-reviews", "finalize-task", "restore-run",
     "history-configure", "import-history", "add-memory-note", "add-history-link", "prework-configure",
@@ -83,18 +86,30 @@ def _dispatch(args, params):
             raise ValueError("init 不接受输入参数")
         return Store.initialize(args.project)
 
+    if command in {"execution-admit", "execution-invalidate"} and (args.credential_file is not None or args.request_id is not None):
+        raise ValueError("宿主执行缓存命令不接受正式写凭据或request-id")
     token = None
     if args.credential_file is not None:
         token = args.credential_file.read_text(encoding="utf-8").strip()
         if not token:
             raise ValueError("凭据文件为空")
     store = Store(args.project, token)
+    if command in {"execution-admit", "execution-invalidate"}:
+        from .execution_control import ExecutionControl
+        method = ExecutionControl(store).admit if command == "execution-admit" else ExecutionControl(store).invalidate
+        return _call(method, params)
     if command == "grant":
         return _call(store.grant, params, args.request_id)
 
     if command in READ_ONLY:
         if args.request_id is not None:
             raise ValueError("只读命令不接受 --request-id")
+        if command == "execution-status":
+            from .execution_control import ExecutionControl
+            return _call(ExecutionControl(store).status, params)
+        if command == 'execution-materials':
+            from .execution_materials import ExecutionMaterials
+            return _call(ExecutionMaterials(store).packet,params)
         if command in {'client-context','client-guard-status','client-adapter-check'}:
             from . import client_guard
             if command == 'client-context':
@@ -153,6 +168,9 @@ def _dispatch(args, params):
 
     if not args.request_id:
         raise ValueError("写操作必须通过 CLI 明确提供 --request-id")
+    if command in EXECUTION_COMMANDS:
+        from .execution_control import ExecutionControl
+        return _call(getattr(ExecutionControl(store), EXECUTION_COMMANDS[command]), params, args.request_id)
     project = Project(args.project, token)
     if command in {'import-history','add-memory-note','add-history-link','prework-configure'}:
         from .memory_catalog import MemoryCatalog
@@ -213,13 +231,14 @@ def _dispatch(args, params):
         }[command]
         return _call(method, params, args.request_id)
 
-    if command in {"prepare-external-review", "run-external-review"}:
+    if command in {"prepare-external-review", "run-external-review", "recapture-external-review"}:
         if "runner" in params:
             raise ValueError("runner是内部测试钩子，不能通过CLI指定")
         from .external_review import ExternalReview
         review = ExternalReview(store)
         method = {"prepare-external-review": review.prepare,
-                  "run-external-review": review.run}[command]
+                  "run-external-review": review.run,
+                  "recapture-external-review": review.recapture}[command]
         return _call(method, params, args.request_id)
 
     if command in {"register-tool", "set-tool-enabled", "run-tool", "restore-run"}:
