@@ -12,8 +12,8 @@ from .storage import Store
 
 READ_ONLY = {"get", "list", "events", "status", "check-receipt", "check-finalize", "trace", "views-status", "memory-query", "run-evidence", "task-checkpoint",
     "history-query", "history-get", "history-read", "session-context", "reading-usage", "task-attention", "event-feed",
-    "client-context", "client-guard-status", "client-adapter-check", "execution-status", "execution-materials"}
-EXECUTION_COMMANDS = {"execution-configure": "configure", "execution-begin": "begin",
+    "client-context", "client-guard-status", "client-adapter-check", "client-workflow", "execution-status", "execution-materials"}
+EXECUTION_COMMANDS = {"execution-start":"start", "execution-configure": "configure", "execution-begin": "begin",
     "execution-report": "report", "execution-decide": "decide"}
 PROJECT_COMMANDS = {
     "request-decision": "request_decision",
@@ -41,7 +41,7 @@ PROJECT_COMMANDS = {
     "stop-task": "stop_task",
 }
 COMMANDS = READ_ONLY | set(PROJECT_COMMANDS) | set(EXECUTION_COMMANDS) | {
-    "execution-admit", "execution-invalidate",
+    "execution-admit", "execution-invalidate", "client-mode",
     "init", "grant", "claim-output", "takeover-output", "release-output",
     "register-resource", "reserve-resource", "finish-reservation",
     "prepare-external-review", "run-external-review", "recapture-external-review",
@@ -81,6 +81,11 @@ def _call(method, params, request_id=None):
 
 def _dispatch(args, params):
     command = args.command
+    if command=='client-mode':
+        if args.credential_file is not None or args.request_id is not None:
+            raise ValueError('客户端模式操作不接受正式写凭据或request-id，不扩展正式权限')
+        from .execution_mode import set_mode
+        return _call(lambda **values:set_mode(args.project,**values),params)
     if command == "init":
         if params:
             raise ValueError("init 不接受输入参数")
@@ -104,6 +109,9 @@ def _dispatch(args, params):
     if command in READ_ONLY:
         if args.request_id is not None:
             raise ValueError("只读命令不接受 --request-id")
+        if command=='client-workflow':
+            from .execution_mode import workflow
+            return _call(lambda **values:workflow(args.project,**values),params)
         if command == "execution-status":
             from .execution_control import ExecutionControl
             return _call(ExecutionControl(store).status, params)
