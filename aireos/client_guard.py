@@ -39,6 +39,8 @@ def policy(root):
         raise FrameworkError('执行段策略须明确enabled布尔值')
     if execution.get('host_tool_state') not in {None,'zcode-sqlite'}:
         raise FrameworkError('原生工具终态接口尚未适配，不能静默忽略')
+    if execution.get('scope','all_sessions') not in {'all_sessions','bound_sessions','opt_in'}:
+        raise FrameworkError('执行控制scope须为all_sessions、bound_sessions或opt_in')
     return value
 
 
@@ -66,6 +68,7 @@ def _db(root):
     connection.row_factory = sqlite3.Row
     try:
         connection.execute('CREATE TABLE IF NOT EXISTS sessions (session TEXT PRIMARY KEY, turn TEXT NOT NULL, query TEXT NOT NULL, packet TEXT, error TEXT, attempt TEXT)')
+        connection.execute('CREATE TABLE IF NOT EXISTS execution_modes(session TEXT PRIMARY KEY, enabled INTEGER NOT NULL, released TEXT, note TEXT NOT NULL)')
         if 'attempt' not in [row[1] for row in connection.execute('PRAGMA table_info(sessions)')]:
             connection.execute('ALTER TABLE sessions ADD COLUMN attempt TEXT')
         with connection:
@@ -133,14 +136,21 @@ def retrieve(root, session_id=None, query=None, turn_id=None, max_chars=10000):
 
 
 def context_text(root):
-    entry = str(_inside(root, policy(root).get('entry', 'aiops/aireos/run.py'))).replace('\\', '/')
+    config = policy(root)
+    entry = str(_inside(root, config.get('entry', 'aiops/aireos/run.py'))).replace('\\', '/')
     return ('[AI-REOS] 新工作以本项目.aireos为正式记录。查项目记录一律先治理检索，当前状态同样适用。'
             '启用ZCode严格模式时，每轮UserPromptSubmit自动带问题联查新版记录与历史，成功后才开放普通项目工具。'
             'session-context无query只给导航，不能算完成检索。失败须修复后重新查询；不得退回grep替代。'
             '检索片段或已采纳状态不代替原文、完整覆盖或科学正确。新任务仍须prepare。'
             '旧账本只读，不追加新正式事实；新教训通过新版受管入口登记。'
             '恢复入口："' + str(Path(sys.executable).resolve()).replace('\\', '/') + '" -X utf8 "' + entry + '" client-context --input <含query和session_id的JSON>。'
-            '其他客户端只有明确接入并验证相同事件后才有程序保障。')
+            '其他客户端只有明确接入并验证相同事件后才有程序保障。'
+            + ('执行控制仅约束已有正式绑定或执行段的会话；未绑定会话保持普通工作流，不能猜任务ID作为绑定。'
+               if config.get('execution',{}).get('scope')=='bound_sessions' else '')
+            + ('默认普通工作模式，任务大小或登记行为不自动启用。只有用户明确说“开启受管长任务”才进入；'
+               '主控随后办理登记和execution-start绑定，不能自行把小任务升级。'
+               '讨论或引用开启口令不算启用；用户无需切换内部编号或填写JSON。'
+               if config.get('execution',{}).get('scope')=='opt_in' else ''))
 
 
 def _bootstrap(root, config, payload):
@@ -266,12 +276,57 @@ def _control_command(root, config, payload):
         return False
 
 
+def _execution_recovery_hint(root,session_id,config):
+    """拒绝时直接给出有限恢复协议，不要求执行者在被锁状态读取源码。"""
+    from .execution_recovery import SCHEMAS, input_path
+    example=input_path(root,session_id,'execution-status')
+    schemas={name:{'required':sorted(fields[0]),'optional':sorted(fields[1])}
+             for name,fields in SCHEMAS.items()}
+    body=json.dumps({'task_id':'TASK-准确正式编号','session_id':session_id},ensure_ascii=False)
+    entry=str(_inside(root,config['entry'])).replace('\\','/')
+    command='"'+str(Path(sys.executable).resolve()).replace('\\','/')+'" -B -X utf8 "'+entry+'" execution-status --input "'+str(example).replace('\\','/')+'"'
+    return ('恢复入口：用Write创建 '+str(example)+'，必需字段示例：'+body+'。随后Bash仅执行 '+command
+            +'。不能根据题目猜测任务；尚无任务须由主控先按正式流程登记。白名单命令及必需required/可选optional字段：'
+            +json.dumps(schemas,ensure_ascii=False)+'。其他命令替换文件末尾的命令名及CLI命令；'
+            '正式写操作仍须原作用域凭据及request-id。报告路径由execution-status的recovery.report_path给出，'
+            '只能新建保留全部原验收项的有限JSON草稿，再用add-artifact、execution-report和项目既有审核恢复。')
+
+
 def _execution(root,event,payload,config,session_id):
     if not config.get('execution',{}).get('enabled',False):
         return 0,None,''
     from .execution_control import ExecutionControl
-    from .storage import Store
-    control=ExecutionControl(Store(root))
+    from .storage import Store, Transaction
+    store=Store(root)
+    if config['execution'].get('scope')=='opt_in':
+        from .execution_mode import mode,managed
+        if not managed(root,session_id):
+            if not mode(root,session_id)['enabled']:
+                return 0,None,''
+            if event=='PreToolUse' and payload.get('tool_name')=='Write':
+                from .execution_recovery import write_allowed
+                values=payload.get('tool_input') or {}
+                if isinstance(values.get('file_path'),str):
+                    try:
+                        if write_allowed(root,session_id,_tool_path(root,payload,values['file_path']),values.get('content')):
+                            return 0,None,''
+                    except (FrameworkError,OSError,ValueError,TypeError) as exc:
+                        return 2,None,'启动输入未通过：'+str(exc)+'。'+_execution_recovery_hint(root,session_id,config)
+            if event=='PreToolUse' and _control_command(root,config,payload):return 0,None,''
+            if event=='PreToolUse':
+                return 2,None,'用户已开启受管长任务；尚未准确绑定，先由主控办理启动。'+_execution_recovery_hint(root,session_id,config)
+            if event=='Stop':
+                return 0,{'systemMessage':'受管长任务尚未启动；可以交还用户，不能声称任务完成或计算已执行。'},''
+            return 0,None,''
+    if config['execution'].get('scope')=='bound_sessions':
+        # 只查正式绑定和历史段，不能靠清缓存、换提示或撤销本段退回普通会话。
+        with store.connection() as connection:
+            tx=Transaction(store,connection,{'scopes':['.']})
+            managed=any(obj['data']['session_id']==session_id
+                        for kind in ('execution_binding','execution_segment') for obj in tx.list(kind))
+        if not managed:
+            return 0,None,''
+    control=ExecutionControl(store)
     if (event in {'PreToolUse','Stop'}
             and config['execution'].get('host_tool_state')=='zcode-sqlite'):
         from .zcode_state import reconcile
@@ -292,9 +347,13 @@ def _execution(root,event,payload,config,session_id):
             candidate=('execution-reports' in raw.parts or raw.name.startswith('execution-input-'))
             if candidate:
                 from .execution_recovery import write_allowed
-                if write_allowed(root,session_id,raw,values.get('content')):
-                    return 0,None,''
-                return 2,None,'恢复写入不在当前会话、正式任务和准确报告的派生路径内。'
+                try:
+                    if write_allowed(root,session_id,raw,values.get('content')):
+                        return 0,None,''
+                    detail='恢复写入不在当前会话、正式任务和准确报告的派生路径内。'
+                except (FrameworkError,OSError,ValueError,TypeError) as exc:
+                    detail='恢复输入未通过：'+str(exc)+'。'
+                return 2,None,detail+_execution_recovery_hint(root,session_id,config)
     if event=='PreToolUse' and _control_command(root,config,payload):
         return 0,None,''
     try:
@@ -330,18 +389,23 @@ def _execution(root,event,payload,config,session_id):
         result=control.admit(session_id=session_id,segment_id=current.get('segment_id'),
             tool_name=payload.get('tool_name'),tool_input=values,event_id=event_id,track=True)
         if not result.get('allowed') or result.get('replayed'):
-            from .execution_recovery import input_path
-            example=input_path(root,session_id,'execution-status')
             return 2,None,('执行段未放行：'+'；'.join(result.get('reasons') or ['已处理工具事件不能再次执行'])
-                +'。可Write有限治理JSON到 '+str(example)+'（将末尾命令名替换为白名单命令）；'
-                '报告路径由execution-status的recovery.report_path给出，只能新建有限JSON草稿；'
-                '需保留全部原验收项，之后用add-artifact、execution-report和项目既有审核恢复。')
+                +'。'+_execution_recovery_hint(root,session_id,config))
     return 0,None,''
 
 
 def handle(root, event, payload):
     """返回退出码、客户端JSON及诊断；未知/损坏的已启用守卫不静默放行。"""
     try:
+        mode_error=None
+        try:
+            if event=='UserPromptSubmit' and isinstance(payload,dict):
+                from .execution_mode import prompt_request,set_mode,ON,OFF
+                requested=prompt_request(payload.get('prompt'))
+                if requested is not None and policy(root).get('execution',{}).get('scope')=='opt_in':
+                    set_mode(root,payload.get('session_id') or os.environ.get('CLAUDE_SESSION_ID'),requested,ON if requested else OFF)
+        except Exception as exc:
+            mode_error=exc
         if event == 'UserPromptSubmit':
             session = (payload.get('session_id') if isinstance(payload,dict) else None) or os.environ.get('CLAUDE_SESSION_ID')
             if session:
@@ -350,6 +414,7 @@ def handle(root, event, payload):
                 from .execution_control import ExecutionControl
                 from .storage import Store
                 ExecutionControl(Store(root)).invalidate(session)
+        if mode_error is not None:raise mode_error
         config = policy(root)
         if not config.get('enabled'):
             return 0, None, ''
@@ -359,6 +424,9 @@ def handle(root, event, payload):
             return 0, None, ''
         session_id = payload.get('session_id') or os.environ.get('CLAUDE_SESSION_ID')
         _session(session_id)
+        # 仅宿主原生向用户提问工具；不包含任何MCP发信、任意工具或执行动作。
+        if event=='PreToolUse' and payload.get('tool_name')=='AskUserQuestion':
+            return 0,None,''
         if event == 'PreToolUse' and _query_write(root,payload,session_id):
             return 0,None,''
         if event == 'SessionStart':
@@ -381,6 +449,9 @@ def handle(root, event, payload):
             turn = begin(root, session_id, query)
             found = retrieve(root, session_id, query, turn_id=turn)
             text = context_text(root) + '\n' + json.dumps({'prompt_truncated': truncated, **found}, ensure_ascii=False)
+            if config.get('execution',{}).get('scope')=='opt_in':
+                from .execution_mode import workflow
+                text+='\n受管模式：'+json.dumps(workflow(root,session_id),ensure_ascii=False)
             return 0, {'hookSpecificOutput': {'hookEventName': event, 'additionalContext': text}}, ''
         if event == 'PreToolUse':
             tool = payload.get('tool_name')

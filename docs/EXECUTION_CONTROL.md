@@ -6,6 +6,20 @@
 
 本能力是显式接入：旧任务不会自动生成执行策略。模型可读取状态，但工具放行必须由受信宿主在真正执行工具之前调用；模型自行调用一次 `execution-admit` 不能证明宿主已强制接入。
 
+## 用户显式启用
+
+选择客户端策略 `execution.scope="opt_in"` 后，默认是普通工作模式。普通问答、小任务、正式任务登记、长时间运行的字样均不会自动启用。用户在消息首行单独写“开启受管长任务”，下一行给出任务；仅在接入的真实UserPromptSubmit事件中识别该口令，讨论、引用及代码块中的口令不会触发。设置按会话保存，用户不需要编写JSON或指定内部编号，也不因此授予科研、外审、super-agent或新的费用授权。
+
+开启后尚未绑定时保留固定治理启动、诊断和向用户提问入口，普通执行暂缓。主控先查清准确任务，缺少任务则调用create-task，再调用execution-start，不能根据相似题目绑定历史任务。execution-start组合原有prepare、start-task、add-artifact、configure、begin，保存original_text的准确UTF-8字节，使用调用方明确提供的完整证据规则及预算；返回execution可直接放入已有派发接口。原请求重放不重置预算或撤销，新请求不能重新配置已有策略。阶段继续仍走原独立审核机制。
+
+用户首行“退出受管长任务”可退出尚未绑定的模式。已经绑定时须先按原流程完成或hold/停止交接且没有在途工具；退出请求本身不会解除限制或启动额外审核。成功退出保留准确段版本的操作记录，后续新段或报告版本变化不能复用旧退出记录。既有正式绑定继续受控，不因改为默认普通模式降级。
+
+client-workflow为只读诊断；未接入原生hook的客户端由主控在用户明确授权后调用client-mode，参数为session_id、enabled及准确口令authorization。此路径保留客户端实际覆盖限制，不能声称代码独立验证了用户授权的来源。普通模式无新执行段约束，原项目检索、保护、权限和计算守卫继续生效。
+
+客户端策略 `execution.enabled=true` 时，可用 `execution.scope="bound_sessions"` 只约束已有正式 `execution_binding` 或执行段的会话。未绑定会话完成本轮治理检索后沿普通工作流执行；旧任务不会仅因启用脚本隔离通道而被锁死。已有绑定不会因清缓存、撤销或新提示退出执行控制。省略scope沿用 `all_sessions` 全会话严格模式；仅在已有完整任务启动流程时选用，否则未绑定会话也会被拒绝。
+
+原生 `AskUserQuestion` 是向用户澄清的恢复通道，不消耗执行预算；它不授予续行。阻断诊断直接列出有限治理恢复命令、必需和可选字段；不开放任意shell、写文件或MCP外发工具。
+
 ## 原任务与证据规则
 
 `ExecutionControl(store).configure(task_id, original_item_id, evidence_rules, max_tools, max_seconds, request_id)` 需要 `plan` 能力，输出 `execution_policy`。任务须已开始且输出范围获准，原件须是已经登记的文件产物。策略固定原合同摘要、原件的 `id/rev/digest` 和文件快照、每项验收所需证据类别、每段工具与时间预算。

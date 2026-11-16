@@ -14,6 +14,9 @@ from .storage import Store, Transaction, within
 
 MAX_BYTES = 64 * 1024
 SCHEMAS = {
+    'create-task': ({'title','objective','acceptance','outputs'},{'inputs','budget','stop_conditions','recall_mode'}),
+    'client-workflow': ({'session_id'},set()),
+    'execution-start': ({'task_id','session_id','original_text','evidence_rules','max_tools','max_seconds','criteria','purpose','expected'},set()),
     'execution-materials': ({'segment_id'}, {'max_bytes'}),
     'execution-status': ({'task_id', 'session_id'}, set()),
     'execution-configure': ({'task_id', 'original_item_id', 'evidence_rules', 'max_tools', 'max_seconds'}, set()),
@@ -121,6 +124,27 @@ def validate_input(root, session_id, command, body):
     _fields(body, *SCHEMAS[command])
     store = Store(root)
     control = ExecutionControl(store)
+    if command=='client-workflow':
+        if body['session_id']!=session_id:raise FrameworkError('只能诊断宿主当前会话')
+        return {}
+    if command in {'create-task','execution-start'}:
+        from .execution_mode import managed
+        if managed(root,session_id):raise FrameworkError('已有绑定；不能借新任务或启动命令绕过执行段')
+        if command=='execution-start':
+            if body['session_id']!=session_id:raise FrameworkError('启动会话须与真实宿主相符')
+            control.validate_start(**body)
+        else:
+            for field in ('title','objective'):_text(body[field])
+            for field in ('acceptance','outputs'):
+                values=body[field]
+                if not isinstance(values,list) or not 1<=len(values)<=128:raise FrameworkError('任务验收/输出须为有限非空数组')
+                for value in values:_text(value)
+            for output in body['outputs']:
+                relative=inputs.canonical_path(store.root,output)
+                if any(p.startswith('.') for p in Path(relative).parts):raise FrameworkError('启动任务输出不能指向隐藏控制目录')
+            if 'inputs' in body and not isinstance(body['inputs'],list):raise FrameworkError('任务输入须为数组')
+            if 'budget' in body and not isinstance(body['budget'],dict):raise FrameworkError('任务预算须为对象')
+        return {'task_id':body.get('task_id')}
     with store.connection() as connection:
         tx = Transaction(store, connection, {'scopes': ['.']})
         task, segment = _task_for(tx, body)

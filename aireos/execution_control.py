@@ -27,6 +27,80 @@ class ExecutionControl:
     def __init__(self, store):
         self.store = store
 
+    def validate_start(self,task_id,session_id,original_text,evidence_rules,max_tools,max_seconds,criteria,purpose,expected):
+        """启动参数的无写入预检；不猜任务、原文、证据规则或预算。"""
+        from .client_guard import policy
+        from .execution_mode import mode
+        _text(session_id,'会话id');_text(purpose,'段目的');_text(expected,'预期')
+        _positive(max_tools,'工具预算');_positive(max_seconds,'时间预算')
+        if not isinstance(original_text,str) or not original_text.strip() or len(original_text.encode('utf-8'))>65536:
+            raise FrameworkError('原文须为不超过64KiB的完整非空UTF-8文本')
+        if policy(self.store.root).get('execution',{}).get('scope')=='opt_in' and not mode(self.store.root,session_id)['enabled']:
+            raise PermissionDenied('用户尚未显式开启受管长任务；不能自动升级普通任务')
+        with self.store.connection() as connection:
+            tx=Transaction(self.store,connection,{'scopes':['.']})
+            task=typed(tx,task_id,'task')
+            if task['data']['status'] not in {'planned','running'}:raise FrameworkError('启动须有准确待执行或执行中任务')
+            names=self._criteria(task)
+            if (not isinstance(criteria,list) or not criteria or not all(isinstance(c,str) for c in criteria)
+                    or len(set(criteria))!=len(criteria) or not set(criteria)<=set(names)):
+                raise FrameworkError('启动验收范围须为原合同非空A编号子集')
+            if not isinstance(evidence_rules,list) or len(evidence_rules)!=len(names):
+                raise FrameworkError('启动规则须覆盖全部原验收项')
+            keys=[]
+            for rule in evidence_rules:
+                if not isinstance(rule,dict) or set(rule)!={'criterion','required_classes'}:raise FrameworkError('证据规则字段不符')
+                key=rule['criterion'];classes=rule['required_classes']
+                if not isinstance(key,str) or not isinstance(classes,list) or not classes or len(classes)>16:
+                    raise FrameworkError('证据规则须有准确编号及有限类别数组')
+                if any(not isinstance(c,str) or not c.strip() or len(c)>100 for c in classes) or len(set(classes))!=len(classes):
+                    raise FrameworkError('证据类别不能为空或重复')
+                keys.append(key)
+            if len(set(keys))!=len(keys) or set(keys)!=set(names):raise FrameworkError('启动规则不能缩减或增加原验收')
+            self._no_pending(tx,task_id)
+        from pathlib import Path
+        from .execution_recovery import plain_target
+        for output in task['data']['contract']['outputs']:
+            candidate=self.store.root/output
+            if not any(p.startswith('.') for p in Path(output).parts) and (candidate.is_dir() or (not candidate.exists() and not candidate.suffix)):
+                plain_target(self.store.root,candidate,directory=True)
+                return task,candidate/'execution-original'/(task_id+'.txt')
+        raise FrameworkError('长任务须声明可容纳原文及阶段报告的输出目录；不能占用单一科学文件')
+
+    def start(self,task_id,session_id,original_text,evidence_rules,max_tools,max_seconds,criteria,purpose,expected,request_id):
+        """组合既有服务；失败可原请求重试，重放不补发预算。"""
+        from .execution_recovery import plain_target
+        payload=dict(task_id=task_id,session_id=session_id,original_text=original_text,evidence_rules=evidence_rules,
+                     max_tools=max_tools,max_seconds=max_seconds,criteria=criteria,purpose=purpose,expected=expected)
+        task,path=self.validate_start(**payload)
+        if not isinstance(request_id,str) or not request_id.strip() or len(request_id)>200:raise FrameworkError('启动须有有限请求身份')
+        import hashlib
+        key='execution-start-'+hashlib.sha256(request_id.encode()).hexdigest()
+        with self.store.connection() as connection:
+            principal=self.store._principal(connection,'plan');self.store._principal(connection,'execute')
+            tx=Transaction(self.store,connection,principal)
+            tx.require_scope(path.relative_to(self.store.root).as_posix())
+            existing=[p for p in tx.list('execution_policy') if p['data']['task']==task_id]
+            replay=connection.execute('SELECT 1 FROM requests WHERE request_id=?',(key+':intent',)).fetchone()
+            if existing and not replay:raise ConflictError('已有固定策略；须沿报告、独立审核和续行路径，不能重新启动')
+        self.store.mutate('execution.start.intent',payload,key+':intent','plan',lambda tx:{'task_id':task_id})
+        project=Project(self.store.root,self.store.token)
+        receipt=project.prepare(task_id,purpose,key+':prepare',max_chars=3000)
+        if task['data']['status']=='planned':project.start_task(task_id,receipt['id'],key+':task')
+        plain_target(self.store.root,path.parent,directory=True)
+        path.parent.mkdir(parents=True,exist_ok=True)
+        plain_target(self.store.root,path)
+        raw=original_text.encode('utf-8')
+        try:
+            with path.open('xb') as handle:handle.write(raw)
+        except FileExistsError:
+            if path.read_bytes()!=raw:raise ConflictError('原文已存在且字节不同，不能覆盖准确任务原件')
+        original=project.add_artifact(path.relative_to(self.store.root).as_posix(),'受管长任务准确原文',task_id,key+':original')
+        policy=self.configure(task_id,original['id'],evidence_rules,max_tools,max_seconds,key+':policy')
+        segment=self.begin(task_id,session_id,criteria,purpose,expected,key+':segment')
+        return dict(task_id=task_id,receipt_id=receipt['id'],original=original,policy=policy,segment=segment,
+                    execution=dict(task_id=task_id,session_id=session_id,segment_id=segment['id']))
+
     @staticmethod
     def _criteria(task):
         return ['A' + str(i + 1) for i in range(len(task['data']['contract']['acceptance']))]
@@ -112,6 +186,11 @@ class ExecutionControl:
         return self.store.mutate('execution.configure', payload, request_id, 'plan', apply)
 
     def begin(self, task_id, session_id, criteria, purpose, expected, request_id):
+        from .execution_mode import opt_in
+        if opt_in(self.store.root):
+            from .execution_mode import mode,managed
+            if not mode(self.store.root,session_id)['enabled'] and not managed(self.store.root,session_id):
+                raise PermissionDenied('用户尚未显式开启受管长任务；正式登记任务不等于授权绑定')
         for value, label in ((session_id, '会话id'), (purpose, '阶段目的'), (expected, '阶段预期')):
             _text(value, label)
         payload = dict(task=task_id, session_id=session_id, criteria=criteria, purpose=purpose, expected=expected)

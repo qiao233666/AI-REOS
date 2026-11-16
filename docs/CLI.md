@@ -136,3 +136,12 @@ event-feed 不创建收据或新事件，也不常驻监听、唤醒模型或外
 ## 客户端检索前置（alpha.8）
 
 只读命令`client-context`输入`{"query":"本轮具体问题","session_id":"宿主当前会话id"}`，仅在已建立本轮状态后执行真实联查并写运行缓存；不产生正式prepare收据。`client-guard-status`输入`{"session_id":"当前会话id"}`读取本轮状态；`client-adapter-check`无输入检查已启用适配。详见[接入及边界](CLIENT_RETRIEVAL_GUARD.md)。
+# 显式受管长任务入口
+
+项目选择execution.scope=opt_in时默认普通工作，只有用户明确开启后主控才使用下列入口。用户无需填写内部JSON。
+
+- `client-workflow --input <JSON>`：只读；参数session_id，返回当前模式、启动路径和必需字段。
+- `client-mode --input <JSON>`：未接原生hook客户端的主控转交用户设置；参数session_id、enabled（布尔）、authorization（准确“开启受管长任务”或“退出受管长任务”），不传凭据或request-id；不授予科研或正式写权限。
+- `execution-start --input <JSON> --credential-file <原凭据> --request-id <稳定请求身份>`：主控同时具有原plan/execute能力。参数task_id、session_id、original_text、evidence_rules、max_tools、max_seconds、criteria、purpose、expected。复用已有prepare/start-task/artifact/configure/begin，返回execution绑定。任务不存在先按原create-task登记；任务归属不由框架猜测。换请求不能重配旧策略，后续段仍按原审核续行。
+
+已接ZCode钩子从用户消息首行识别明确口令；其他客户端的主控转交路径不能声称同等原生事件保障。完整说明见EXECUTION_CONTROL.md。
